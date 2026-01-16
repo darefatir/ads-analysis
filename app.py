@@ -48,6 +48,11 @@ def load_data():
         df['booking_rate'] = df.apply(lambda x: (x['ads_cta'] / x['ads_click']) * 100 if x['ads_click'] > 0 else 0, axis=1)
         df['calculated_cpc'] = df.apply(lambda x: x['ads_spend'] / x['ads_click'] if x['ads_click'] > 0 else 0, axis=1)
         
+        # --- SMOOTHING (MOVING AVERAGES) ---
+        # Calculate 4-Week Rolling Average to remove noise/volatility
+        df['cpc_smooth'] = df['calculated_cpc'].rolling(window=4, min_periods=1).mean()
+        df['booking_rate_smooth'] = df['booking_rate'].rolling(window=4, min_periods=1).mean()
+        
         # STATUS DEFINITION
         cpa_25 = df['unique_cpa'].quantile(0.25)
         cpa_75 = df['unique_cpa'].quantile(0.75)
@@ -124,14 +129,14 @@ if not df.empty:
             st.error("⚠️ 'Problem' Weeks (Expensive)")
             st.dataframe(top_5_bad[['week_start_date', 'ads_spend', 'ads_unique_cta', 'unique_cpa']].style.format({'ads_spend': format_currency, 'unique_cpa': format_currency, 'ads_unique_cta': '{:,.0f}'}), hide_index=True, use_container_width=True)
 
-    # === TAB 3: INSIGHTS (IMPROVED CHART & TABLE) ===
+    # === TAB 3: INSIGHTS (SMOOTHED CHART) ===
     with tab3:
         st.header("3. Deep Dive Insights")
         
-        # --- 1. THE PRICE OF QUALITY CHART ---
+        # --- 1. THE PRICE OF QUALITY CHART (SMOOTHED) ---
         st.subheader("A. The 'Price of Quality' Trap")
         
-        # Create Calculation for Table
+        # Calculation for Table
         low_spend_df = df[df['ads_spend'] < 2e9]
         high_spend_df = df[df['ads_spend'] >= 2e9]
         
@@ -147,59 +152,46 @@ if not df.empty:
         
         with col_chart:
             fig_cpc = go.Figure()
-            fig_cpc.add_trace(go.Scatter(
-                x=df['week_start_date'], y=df['calculated_cpc'], name='Cost Per Click (CPC)',
-                line=dict(color='#ef4444', width=3), mode='lines'
-            ))
-            fig_cpc.add_trace(go.Scatter(
-                x=df['week_start_date'], y=df['booking_rate'], name='Booking Rate (%)',
-                yaxis='y2', line=dict(color='#22c55e', width=3), mode='lines'
-            ))
             
-            # IMPROVED LAYOUT: FORCE 0 START
+            # RAW DATA (Faint)
+            fig_cpc.add_trace(go.Scatter(x=df['week_start_date'], y=df['calculated_cpc'], name='CPC (Raw)', line=dict(color='#ef4444', width=1, dash='dot'), opacity=0.3, showlegend=False))
+            fig_cpc.add_trace(go.Scatter(x=df['week_start_date'], y=df['booking_rate'], name='Booking Rate (Raw)', yaxis='y2', line=dict(color='#22c55e', width=1, dash='dot'), opacity=0.3, showlegend=False))
+            
+            # TREND LINES (Thick & Smooth)
+            fig_cpc.add_trace(go.Scatter(x=df['week_start_date'], y=df['cpc_smooth'], name='Cost Trend (4-Week Avg)', line=dict(color='#ef4444', width=4)))
+            fig_cpc.add_trace(go.Scatter(x=df['week_start_date'], y=df['booking_rate_smooth'], name='Quality Trend (4-Week Avg)', yaxis='y2', line=dict(color='#22c55e', width=4)))
+            
             fig_cpc.update_layout(
-                title="Trap: Cost (Red) vs Quality (Green)",
-                yaxis=dict(
-                    title=dict(text='Cost Per Click (IDR)', font=dict(color='#ef4444')),
-                    tickfont=dict(color='#ef4444'),
-                    showgrid=False,
-                    rangemode="tozero" # Forces axis to start at 0
-                ),
-                yaxis2=dict(
-                    title=dict(text='Booking Rate (%)', font=dict(color='#22c55e')),
-                    tickfont=dict(color='#22c55e'),
-                    overlaying='y',
-                    side='right',
-                    showgrid=False,
-                    rangemode="tozero" # Forces axis to start at 0
-                ),
+                title="Trend: Cost (Red) vs Quality (Green)",
+                yaxis=dict(title=dict(text='Cost Per Click (IDR)', font=dict(color='#ef4444')), tickfont=dict(color='#ef4444'), showgrid=False, rangemode="tozero"),
+                yaxis2=dict(title=dict(text='Booking Rate (%)', font=dict(color='#22c55e')), tickfont=dict(color='#22c55e'), overlaying='y', side='right', showgrid=False, rangemode="tozero"),
                 hovermode='x unified', template="plotly_white", legend=dict(orientation="h", y=1.1)
             )
             st.plotly_chart(fig_cpc, use_container_width=True)
 
         with col_table:
             st.markdown("##### 📉 ROI Reality Check")
-            st.info("Comparing Low Spend (<2B) vs High Spend (>2B) weeks:")
+            st.info("Comparing Low Spend (<2B) vs High Spend (>2B):")
             
             comparison_data = {
-                "Metric": ["Avg Cost Per Click (CPC)", "Avg Booking Rate"],
+                "Metric": ["Avg Cost Per Click", "Avg Booking Rate"],
                 "Low Spend (<2B)": [f"Rp {avg_cpc_low:,.0f}", f"{avg_br_low:.1f}%"],
                 "High Spend (>2B)": [f"Rp {avg_cpc_high:,.0f}", f"{avg_br_high:.1f}%"],
-                "Growth (%)": [f"🔺 +{cpc_growth:.0f}% (Bad)", f"🟢 +{br_growth:.0f}% (Good)"]
+                "Difference": [f"🔺 +{cpc_growth:.0f}% (COST)", f"🟢 +{br_growth:.0f}% (QUALITY)"]
             }
             comp_df = pd.DataFrame(comparison_data)
             st.dataframe(comp_df, hide_index=True, use_container_width=True)
             
             st.error(f"""
-            **The Problem:**
-            To get a **{br_growth:.0f}%** better booking rate, we had to pay **{cpc_growth:.0f}%** more for every click.
+            **The Trap:**
+            Cost increased by **{cpc_growth:.0f}%**, but Quality only increased by **{br_growth:.0f}%**.
             
-            This mismatch is why our efficiency drops when we spend too much.
+            We are paying a premium that eats our profits.
             """)
         
         st.divider()
         
-        # --- 2. PREVIOUS INSIGHTS ---
+        # --- 2. SATURATION POINT ---
         col_insight_1, col_insight_2 = st.columns(2)
         
         with col_insight_1:
@@ -220,24 +212,29 @@ if not df.empty:
             fig_bar_cvr.update_layout(title="Booking Rate: Success vs Problem Weeks", yaxis_title="Booking Rate (%)")
             st.plotly_chart(fig_bar_cvr, use_container_width=True)
 
-    # === TAB 4: RECOMMENDATIONS ===
+    # === TAB 4: FINAL STRATEGY ===
     with tab4:
-        st.header("4. Strategic Recommendations")
-        st.markdown("Strategy adjustments based on the saturation point analysis.")
+        st.header("4. Final Strategic Proposal")
+        st.markdown("Based on the data audit, we propose **3 Pillars** for the new marketing strategy.")
         st.divider()
 
-        # --- RECOMMENDATION 1 ---
+        # --- PILLAR 1 ---
         c1_text, c1_chart = st.columns([1, 1])
         df['spend_bucket'] = df['ads_spend'].apply(lambda x: 'Safe Zone (<2B)' if x < 2000000000 else 'High Risk (>2B)')
         risk_data = df.groupby('spend_bucket')['status'].value_counts(normalize=True).unstack().fillna(0) * 100
         
-        prob_bad_low = risk_data.loc['Safe Zone (<2B)', 'Problem (Expensive)'] if 'Problem (Expensive)' in risk_data.columns else 0
         prob_bad_high = risk_data.loc['High Risk (>2B)', 'Problem (Expensive)'] if 'High Risk (>2B)' in risk_data.index and 'Problem (Expensive)' in risk_data.columns else 0
         
         with c1_text:
-            st.subheader("1. 🛑 The 2B 'Soft Cap'")
-            st.markdown(f"**Evidence:** In the High Risk Zone (>2B), the chance of a 'Problem Week' jumps to **{prob_bad_high:.1f}%**.")
-            st.markdown("##### 📋 Data Table (Copy to Excel)")
+            st.subheader("1. 🛑 The Financial Guardrail")
+            st.markdown(f"""
+            **The Rule:** Implement a strict weekly spend cap of **Rp 2 Billion**.
+            
+            **The Reason:**
+            * Our analysis confirms that spending >2B has a **{prob_bad_high:.1f}% probability of failure** (Inefficiency).
+            * We must stop "forcing" spend into a saturated audience.
+            """)
+            st.markdown("##### 📋 Data Proof")
             st.dataframe(risk_data.style.format("{:.1f}%"), use_container_width=True)
         
         with c1_chart:
@@ -246,28 +243,33 @@ if not df.empty:
 
         st.divider()
 
-        # --- RECOMMENDATION 2 & 3 ---
+        # --- PILLAR 2 & 3 ---
         c2, c3 = st.columns(2)
         
         with c2:
-            st.subheader("2. 🎯 Fix the 'Click Objective'")
-            st.markdown("Action: Our Cost Per Click (CPC) is exploding. This means we are competing in a very expensive auction. We must test new creative to lower CPC.")
+            st.subheader("2. 🎨 The Creative Pivot")
+            st.markdown("""
+            **The Problem:** We are suffering from the "Premium Trap." We pay +127% more per click to get +55% better users. This destroys ROI.
             
-            fig_corr = px.scatter(df, x='ads_spend', y='calculated_cpc', title="Correlation: Spend vs Cost Per Click", labels={'ads_spend': 'Ad Spend (Rp)', 'calculated_cpc': 'CPC (Rp)'})
-            x_data = df['ads_spend']
-            y_data = df['calculated_cpc']
-            if len(x_data) > 1:
-                m, b = np.polyfit(x_data, y_data, 1)
-                fig_corr.add_trace(go.Scatter(x=x_data, y=m * x_data + b, mode='lines', name='Trend'))
-            st.plotly_chart(fig_corr, use_container_width=True)
+            **The Solution:**
+            * **Attack CPC:** The root cause is high Cost Per Click.
+            * **Action:** Launch **4 New Creative Angles** per month. We need fresh ads to find cheaper clicks, rather than bidding higher on old ads.
+            """)
 
         with c3:
-            st.subheader("3. 📉 Reality Check: Total vs Unique")
+            st.subheader("3. 📉 The Truth Standard")
+            st.markdown("""
+            **The Problem:** We have been reporting "Total Leads," which inflates our success by counting the same person multiple times.
+            
+            **The Solution:**
+            * **Action:** All boardroom reports must use **Unique CPA** (Cost Per New Student) as the primary KPI.
+            * **Impact:** This gives us a realistic view of our growth cost.
+            """)
+            
             total_leads_raw = df['ads_cta'].sum()
             total_leads_unique = df['ads_unique_cta'].sum()
-            st.markdown(f"Gap: **{total_leads_raw:,.0f}** (Reported) vs **{total_leads_unique:,.0f}** (Actual).")
-            fig_gap = go.Figure(data=[go.Bar(name='Reported', x=['Metrics'], y=[total_leads_raw], marker_color='#94a3b8'), go.Bar(name='Actual', x=['Metrics'], y=[total_leads_unique], marker_color='#2563eb')])
-            fig_gap.update_layout(title="The Inflation Gap", barmode='group')
+            fig_gap = go.Figure(data=[go.Bar(name='Reported (Inflated)', x=['Metrics'], y=[total_leads_raw], marker_color='#94a3b8'), go.Bar(name='Actual (Truth)', x=['Metrics'], y=[total_leads_unique], marker_color='#2563eb')])
+            fig_gap.update_layout(title="The Inflation Gap", barmode='group', height=300)
             st.plotly_chart(fig_gap, use_container_width=True)
 
         st.caption("Generated for Sparks Edu Case Study | Data Source: 2019 Ads Export")
