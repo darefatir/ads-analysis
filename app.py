@@ -188,10 +188,6 @@ if not df.empty:
         # --- INSIGHT B: QUALITY vs QUANTITY ---
         with col_insight_2:
             st.subheader("B. The 'Empty Click' Problem")
-            st.markdown("""
-            **Question:** "Clicks are always higher than Buys, so why is this a problem?"
-            \n**Answer:** The *rate* of conversion dropped dangerously low.
-            """)
             
             # Create a comparison of CVR for Good vs Bad weeks
             avg_cvr_good = top_5_good['unique_cvr'].mean()
@@ -206,33 +202,102 @@ if not df.empty:
             
             st.warning(f"""
             During Problem Weeks, the conversion rate crashed to **{avg_cvr_bad:.1f}%**. 
-            This means we bought tons of "low quality" clicks (people who click but have no intent to buy). 
-            During Good Weeks, we were much better at targeting "high intent" people (**{avg_cvr_good:.1f}%**).
+            This means we bought tons of "low quality" clicks.
             """)
 
-    # === TAB 4: RECOMMENDATIONS ===
+    # === TAB 4: RECOMMENDATIONS (UPDATED WITH VISUALS) ===
     with tab4:
         st.header("4. Strategic Recommendations")
-        
-        # Calculate dynamic numbers for the text
-        avg_spend_bad = top_5_bad['ads_spend'].mean()
-        avg_cpa_bad = top_5_bad['unique_cpa'].mean()
-        
-        st.markdown(f"""
-        ### 1. 🛑 The "Soft Cap" Rule (Rp 2 Billion)
-        * **The Insight:** Spending above Rp 2B yields diminishing returns.
-        * **The Action:** Cap weekly spend at Rp 2B. If you have extra budget, save it for a different week or a different campaign. Do not force it into the same audience.
-
-        ### 2. 🎯 Change the "Objective" (Fixing the Click Problem)
-        * **The Insight:** Our high-spend weeks had huge clicks but low conversions. This usually happens when the Ad Algorithm is told to find "Clickers" instead of "Buyers".
-        * **The Action:** Ensure your campaign objective is set to **"Leads"** or **"Conversions"**, NOT "Traffic" or "Link Clicks". We need the algorithm to filter out the "Window Shoppers."
-
-        ### 3. 📉 Focus on "Unique" Metrics
-        * **The Insight:** We found a big gap between `Total Clicks` and `Unique Leads`.
-        * **The Action:** Stop reporting on "Total Clicks". It's a vanity metric. If a user clicks 10 times but buys once, we only care about the 1 buy. Base all future ROI reports on **Cost Per Unique Lead**.
-        """)
+        st.markdown("We propose 3 strategic shifts backed by data evidence.")
         
         st.divider()
+
+        # --- RECOMMENDATION 1: THE CAP ---
+        c1_text, c1_chart = st.columns([1, 1])
+        
+        # Calculate Data for Chart
+        df['spend_bucket'] = df['ads_spend'].apply(lambda x: 'Low (<2B)' if x < 2000000000 else 'High (>2B)')
+        avg_cpa_by_bucket = df.groupby('spend_bucket')['unique_cpa'].mean().reset_index()
+        
+        with c1_text:
+            st.subheader("1. 🛑 The 'Soft Cap' Rule")
+            st.markdown(f"""
+            **The Argument:** We must cap weekly spend at **Rp 2 Billion**.
+            
+            **The Data Evidence:**
+            Look at the chart to the right. We grouped every week of 2019 into "Low Spend" (<2B) and "High Spend" (>2B).
+            
+            * **Result:** When we cross 2B, our average cost per student **increases dramatically**.
+            * We are paying a premium penalty for scaling too fast.
+            """)
+        
+        with c1_chart:
+            fig_bucket = px.bar(
+                avg_cpa_by_bucket, 
+                x='spend_bucket', 
+                y='unique_cpa', 
+                color='spend_bucket',
+                title="Average Cost Per Student: Low vs High Spend",
+                color_discrete_map={'Low (<2B)': '#22c55e', 'High (>2B)': '#ef4444'}
+            )
+            fig_bucket.update_layout(showlegend=False, yaxis_title="Avg Cost Per Student (Rp)")
+            st.plotly_chart(fig_bucket, use_container_width=True)
+
+        st.divider()
+
+        # --- RECOMMENDATION 2: THE QUALITY GAP ---
+        c2_text, c2_chart = st.columns([1, 1])
+        
+        with c2_text:
+            st.subheader("2. 🎯 Fix the 'Click Objective'")
+            st.markdown("""
+            **The Argument:** Stop optimizing for "Traffic". Optimize for "Leads".
+            
+            **The Data Evidence:**
+            The scatter plot shows **Spend vs. Conversion Rate**.
+            
+            * **Trend:** As we spend more money (move right), the Conversion Rate drops (trend goes down).
+            * **Meaning:** If the objective was correct, this line should be flat. The drop proves we are buying "junk clicks" just to hit spend targets.
+            """)
+
+        with c2_chart:
+            fig_corr = px.scatter(
+                df, x='ads_spend', y='unique_cvr', trendline="ols",
+                title="Correlation: Spend vs Conversion Rate",
+                labels={'ads_spend': 'Ad Spend', 'unique_cvr': 'Conversion Rate (%)'}
+            )
+            st.plotly_chart(fig_corr, use_container_width=True)
+
+        st.divider()
+
+        # --- RECOMMENDATION 3: THE INFLATION GAP ---
+        c3_text, c3_chart = st.columns([1, 1])
+        
+        # Calculate Totals
+        total_leads_raw = df['ads_cta'].sum()
+        total_leads_unique = df['ads_unique_cta'].sum()
+        
+        with c3_text:
+            st.subheader("3. 📉 Reality Check: Total vs Unique")
+            st.markdown(f"""
+            **The Argument:** Stop reporting "Total Leads". It is a vanity metric.
+            
+            **The Data Evidence:**
+            We compared the total reported leads vs actual unique people.
+            
+            * **Total Leads reported:** {total_leads_raw:,.0f}
+            * **Actual Unique People:** {total_leads_unique:,.0f}
+            * **The Gap:** We are over-reporting success by counting duplicates.
+            """)
+
+        with c3_chart:
+            fig_gap = go.Figure(data=[
+                go.Bar(name='Total Reported Leads', x=['Metrics'], y=[total_leads_raw], marker_color='#94a3b8'),
+                go.Bar(name='Actual Unique People', x=['Metrics'], y=[total_leads_unique], marker_color='#2563eb')
+            ])
+            fig_gap.update_layout(title="The Inflation Gap: Reported vs Actual", barmode='group')
+            st.plotly_chart(fig_gap, use_container_width=True)
+
         st.caption("Generated for Sparks Edu Case Study | Data Source: 2019 Ads Export")
 
 else:
