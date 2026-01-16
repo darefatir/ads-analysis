@@ -11,7 +11,6 @@ st.set_page_config(
 )
 
 # --- 2. LOAD DATA DYNAMICALLY ---
-# This function caches the data so it doesn't reload every time you click a button
 @st.cache_data
 def load_data():
     try:
@@ -21,26 +20,40 @@ def load_data():
         # Clean column names
         df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_')
         
-        # --- THE FIX IS HERE ---
-        # 1. errors='coerce' turns bad data (like "Grand Total") into NaT instead of crashing
+        # --- FIX 1: CLEAN NUMERIC COLUMNS (Remove commas) ---
+        # List of columns that might contain commas
+        numeric_cols = ['ads_spend', 'ads_impression', 'ads_click', 'ads_cta', 'ads_unique_cta', 'cpm', 'cpc', 'cpa']
+        
+        for col in numeric_cols:
+            if col in df.columns:
+                # Force convert to string, remove commas, then convert to numeric
+                df[col] = df[col].astype(str).str.replace(',', '', regex=False)
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+        # ----------------------------------------------------
+
+        # --- FIX 2: DATE HANDLING ---
+        # errors='coerce' turns bad data into NaT instead of crashing
         df['week_start_date'] = pd.to_datetime(df['week_start_date'], dayfirst=True, errors='coerce')
         
-        # 2. Drop rows where the date conversion failed (removes empty rows/totals)
+        # Drop rows where the date conversion failed (removes empty rows/totals)
         df = df.dropna(subset=['week_start_date'])
-        # -----------------------
+        
+        # Sort by date to make charts look correct
+        df = df.sort_values('week_start_date')
 
-        # Calculate calculated metrics
-        # (We use .get() or checks to ensure columns exist before dividing)
+        # --- CALCULATE METRICS ---
         if 'ads_spend' in df.columns and 'ads_cta' in df.columns:
-            df['cpa'] = df['ads_spend'] / df['ads_cta']
+            # Avoid division by zero
+            df['cpa'] = df.apply(lambda x: x['ads_spend'] / x['ads_cta'] if x['ads_cta'] > 0 else 0, axis=1)
         
         if 'ads_click' in df.columns and 'ads_impression' in df.columns:
-            df['ctr'] = (df['ads_click'] / df['ads_impression']) * 100
+            df['ctr'] = df.apply(lambda x: (x['ads_click'] / x['ads_impression']) * 100 if x['ads_impression'] > 0 else 0, axis=1)
             
         if 'ads_cta' in df.columns and 'ads_click' in df.columns:
-            df['cvr'] = (df['ads_cta'] / df['ads_click']) * 100
+            df['cvr'] = df.apply(lambda x: (x['ads_cta'] / x['ads_click']) * 100 if x['ads_click'] > 0 else 0, axis=1)
             
         return df
+
     except FileNotFoundError:
         st.error("❌ Error: 'ads_data.csv' not found. Please upload it to your GitHub repo.")
         return pd.DataFrame()
@@ -54,16 +67,18 @@ if not df.empty:
     # --- 3. DASHBOARD HEADER ---
     st.title("📊 Sparks Edu: Ads Performance Analysis")
     
-    # Date Filter (Optional: Allows user to pick the range)
+    # Date Filter Info
     min_date = df['week_start_date'].min()
     max_date = df['week_start_date'].max()
     
     st.caption(f"Data Range: {min_date.strftime('%d %b %Y')} - {max_date.strftime('%d %b %Y')}")
 
-    # Top Level Metrics (Aggregated)
+    # Top Level Metrics
     total_spend = df['ads_spend'].sum()
     total_bookings = df['ads_cta'].sum()
-    avg_cpa = total_spend / total_bookings
+    
+    # Safe calculation for averages
+    avg_cpa = total_spend / total_bookings if total_bookings > 0 else 0
     avg_cvr = df['cvr'].mean()
 
     c1, c2, c3, c4 = st.columns(4)
@@ -76,7 +91,7 @@ if not df.empty:
 
     # --- 4. VISUALIZATIONS ---
     
-    # Question 1: Spend vs Efficiency (Dynamic)
+    # Question 1: Spend vs Efficiency
     st.subheader("1. Spend vs. Efficiency Trend")
     
     fig_combo = go.Figure()
@@ -98,28 +113,34 @@ if not df.empty:
         yaxis=dict(title='Spend (IDR)', showgrid=False),
         yaxis2=dict(title='CPA (IDR)', overlaying='y', side='right', showgrid=False),
         hovermode='x unified',
-        template="plotly_white"
+        template="plotly_white",
+        legend=dict(orientation="h", y=1.1)
     )
     st.plotly_chart(fig_combo, use_container_width=True)
 
-    # Question 2: Success & Problem Detector (Dynamic)
+    # Question 2: Success & Problem Detector
     st.subheader("2. Automated Performance Detection")
     
-    # Logic to find Best/Worst weeks dynamically based on entire dataset
-    best_week = df.loc[df['cpa'].idxmin()]
-    worst_week = df.loc[df['cpa'].idxmax()]
+    # Find Best/Worst weeks (filtering out 0 CPA to avoid empty data skews)
+    valid_weeks = df[df['cpa'] > 0]
+    
+    if not valid_weeks.empty:
+        best_week = valid_weeks.loc[valid_weeks['cpa'].idxmin()]
+        worst_week = valid_weeks.loc[valid_weeks['cpa'].idxmax()]
 
-    col_success, col_problem = st.columns(2)
+        col_success, col_problem = st.columns(2)
 
-    with col_success:
-        st.success(f"🏆 Best Week: {best_week['week_start_date'].strftime('%d %b %Y')}")
-        st.write(f"**CPA:** Rp {best_week['cpa']:,.0f}")
-        st.write(f"**Bookings:** {best_week['ads_cta']:,.0f}")
+        with col_success:
+            st.success(f"🏆 Best Efficiency (Lowest CPA): {best_week['week_start_date'].strftime('%d %b %Y')}")
+            st.metric("CPA", f"Rp {best_week['cpa']:,.0f}")
+            st.metric("Bookings", f"{best_week['ads_cta']:,.0f}")
 
-    with col_problem:
-        st.error(f"⚠️ Worst Week: {worst_week['week_start_date'].strftime('%d %b %Y')}")
-        st.write(f"**CPA:** Rp {worst_week['cpa']:,.0f}")
-        st.write(f"**Bookings:** {worst_week['ads_cta']:,.0f}")
+        with col_problem:
+            st.error(f"⚠️ Lowest Efficiency (Highest CPA): {worst_week['week_start_date'].strftime('%d %b %Y')}")
+            st.metric("CPA", f"Rp {worst_week['cpa']:,.0f}")
+            st.metric("Bookings", f"{worst_week['ads_cta']:,.0f}")
+    else:
+        st.info("Not enough data to determine best/worst weeks.")
 
     # Question 3: Insights (Scatter Plot)
     st.subheader("3. Scale Analysis (Spend vs Result)")
@@ -138,4 +159,4 @@ if not df.empty:
     st.plotly_chart(fig_scatter, use_container_width=True)
 
 else:
-    st.info("👋 Waiting for data. Please upload 'ads_data.csv' to your repository.")
+    st.info("👋 Waiting for data. Please ensure 'ads_data.csv' is in your repository and formatted correctly.")
