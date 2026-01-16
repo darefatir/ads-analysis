@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
-import numpy as np  # Added for manual trendline calculation
+import numpy as np
 
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(
@@ -117,11 +117,8 @@ if not df.empty:
     # === TAB 2: SUCCESS VS PROBLEM WEEKS ===
     with tab2:
         st.header("2. Identifying Performance Extremes")
-        st.markdown("""
-        We analyze **Efficiency**: How much did we pay for each new student?
-        """)
+        st.markdown("We analyze **Efficiency**: How much did we pay for each new student?")
         
-        # 1. Visual Overview
         fig_status = px.scatter(
             df, 
             x='week_start_date', 
@@ -130,67 +127,82 @@ if not df.empty:
             size='ads_spend',
             color_discrete_map={'Good (Efficient)': '#22c55e', 'Problem (Expensive)': '#ef4444', 'Normal': '#94a3b8'},
             title="Timeline: Cost Per Unique Lead (CPA)",
-            labels={'unique_cpa': 'Cost Per Unique Lead', 'week_start_date': 'Week'}
+            labels={'unique_cpa': 'CPA - Cost Per Acquisition (Rp)', 'week_start_date': 'Week'}
         )
         st.plotly_chart(fig_status, use_container_width=True)
 
         st.divider()
 
-        # 2. Detailed Tables
         col_good, col_bad = st.columns(2)
-        
         top_5_good = df.nsmallest(5, 'unique_cpa')
         top_5_bad = df.nlargest(5, 'unique_cpa')
-        
         def format_currency(x): return f"Rp {x:,.0f}"
 
         with col_good:
             st.success("✅ 'Success' Weeks (Efficient)")
-            st.dataframe(
-                top_5_good[['week_start_date', 'ads_spend', 'ads_unique_cta', 'unique_cpa']].style.format({
-                    'ads_spend': format_currency, 'unique_cpa': format_currency, 'ads_unique_cta': '{:,.0f}'
-                }),
-                hide_index=True, use_container_width=True
-            )
+            st.dataframe(top_5_good[['week_start_date', 'ads_spend', 'ads_unique_cta', 'unique_cpa']].style.format({'ads_spend': format_currency, 'unique_cpa': format_currency, 'ads_unique_cta': '{:,.0f}'}), hide_index=True, use_container_width=True)
 
         with col_bad:
             st.error("⚠️ 'Problem' Weeks (Expensive)")
-            st.dataframe(
-                top_5_bad[['week_start_date', 'ads_spend', 'ads_unique_cta', 'unique_cpa']].style.format({
-                    'ads_spend': format_currency, 'unique_cpa': format_currency, 'ads_unique_cta': '{:,.0f}'
-                }),
-                hide_index=True, use_container_width=True
-            )
+            st.dataframe(top_5_bad[['week_start_date', 'ads_spend', 'ads_unique_cta', 'unique_cpa']].style.format({'ads_spend': format_currency, 'unique_cpa': format_currency, 'ads_unique_cta': '{:,.0f}'}), hide_index=True, use_container_width=True)
 
-    # === TAB 3: INSIGHTS ===
+    # === TAB 3: INSIGHTS (IMPROVED) ===
     with tab3:
         st.header("3. Deep Dive Insights")
         
         col_insight_1, col_insight_2 = st.columns(2)
         
-        # --- INSIGHT A: SCALING TRAP ---
+        # --- INSIGHT A: SCALING TRAP (IMPROVED) ---
         with col_insight_1:
             st.subheader("A. The 'Scaling Trap'")
-            st.markdown("""
-            **Observation:** Efficiency collapses when we spend too much too fast.
-            """)
+            st.markdown("**Observation:** Efficiency collapses when we spend too much too fast.")
             
+            # 1. Create Labels for Chart (Only label the "Problems")
+            df['chart_label'] = df.apply(lambda x: x['week_start_date'].strftime('%d %b') if x['status'] == 'Problem (Expensive)' else '', axis=1)
+
+            # 2. Build Chart
             fig_scatter = px.scatter(
                 df, x='ads_spend', y='unique_cpa', size='ads_unique_cta', color='status',
                 color_discrete_map={'Good (Efficient)': '#22c55e', 'Problem (Expensive)': '#ef4444', 'Normal': '#94a3b8'},
-                title="Spend vs. Cost Efficiency",
-                labels={'ads_spend': 'Total Weekly Spend', 'unique_cpa': 'Cost Per Unique Lead'}
+                title="Spend vs. Cost Efficiency (Bubbles = Lead Volume)",
+                labels={
+                    'ads_spend': 'Total Weekly Spend (Rp)', 
+                    'unique_cpa': 'CPA - Cost Per Acquisition (Rp)',
+                    'ads_unique_cta': 'Leads Volume',
+                    'status': 'Performance Status'
+                },
+                text='chart_label' # Add the labels
             )
-            fig_scatter.add_vline(x=2000000000, line_dash="dash", line_color="black", annotation_text="Efficiency Limit")
+            
+            # 3. Add Threshold Line
+            fig_scatter.add_vline(x=2000000000, line_dash="dash", line_color="black", line_width=2, annotation_text="Optimal Spend Threshold", annotation_position="top left")
+            
+            # 4. Polish Traces (Move labels up so they don't block bubbles)
+            fig_scatter.update_traces(textposition='top center')
+            fig_scatter.update_layout(showlegend=True)
+            
             st.plotly_chart(fig_scatter, use_container_width=True)
             
-            st.info("When Spend > Rp 2B (Right side), we almost always hit the 'Red Zone'. We are paying more to reach the same people repeatedly.")
+            # 5. Dynamic Analysis Text
+            high_spend_df = df[df['ads_spend'] > 2e9]
+            low_spend_df = df[df['ads_spend'] <= 2e9]
+            
+            if not high_spend_df.empty and not low_spend_df.empty:
+                avg_cpa_high = high_spend_df['unique_cpa'].mean()
+                avg_cpa_low = low_spend_df['unique_cpa'].mean()
+                diff_pct = ((avg_cpa_high - avg_cpa_low) / avg_cpa_low) * 100
+                
+                st.info(f"""
+                **The Data Reality:**
+                * When Spend is **< Rp 2B** (Left side), average CPA is **Rp {avg_cpa_low:,.0f}**.
+                * When Spend is **> Rp 2B** (Right side), average CPA jumps to **Rp {avg_cpa_high:,.0f}**.
+                * **Conclusion:** We are paying **{diff_pct:.0f}% more** to reach the same people repeatedly.
+                """)
 
         # --- INSIGHT B: QUALITY vs QUANTITY ---
         with col_insight_2:
             st.subheader("B. The 'Empty Click' Problem")
             
-            # Create a comparison of CVR for Good vs Bad weeks
             avg_cvr_good = top_5_good['unique_cvr'].mean()
             avg_cvr_bad = top_5_bad['unique_cvr'].mean()
             
@@ -202,11 +214,11 @@ if not df.empty:
             st.plotly_chart(fig_bar_cvr, use_container_width=True)
             
             st.warning(f"""
-            During Problem Weeks, the conversion rate crashed to **{avg_cvr_bad:.1f}%**. 
-            This means we bought tons of "low quality" clicks.
+            During 'Problem Weeks', conversion rate crashed to **{avg_cvr_bad:.1f}%** (vs **{avg_cvr_good:.1f}%**). 
+            This confirms we were buying "junk clicks" (people who click but don't convert).
             """)
 
-    # === TAB 4: RECOMMENDATIONS (UPDATED: MANUAL TRENDLINE) ===
+    # === TAB 4: RECOMMENDATIONS ===
     with tab4:
         st.header("4. Strategic Recommendations")
         st.markdown("We propose 3 strategic shifts backed by data evidence.")
@@ -215,33 +227,24 @@ if not df.empty:
 
         # --- RECOMMENDATION 1: THE CAP ---
         c1_text, c1_chart = st.columns([1, 1])
-        
-        # Calculate Data for Chart
         df['spend_bucket'] = df['ads_spend'].apply(lambda x: 'Low (<2B)' if x < 2000000000 else 'High (>2B)')
         avg_cpa_by_bucket = df.groupby('spend_bucket')['unique_cpa'].mean().reset_index()
         
         with c1_text:
             st.subheader("1. 🛑 The 'Soft Cap' Rule")
             st.markdown(f"""
-            **The Argument:** We must cap weekly spend at **Rp 2 Billion**.
-            
-            **The Data Evidence:**
-            Look at the chart to the right. We grouped every week of 2019 into "Low Spend" (<2B) and "High Spend" (>2B).
-            
-            * **Result:** When we cross 2B, our average cost per student **increases dramatically**.
-            * We are paying a premium penalty for scaling too fast.
+            **The Argument:** Cap weekly spend at **Rp 2 Billion**.
+            **The Evidence:** Scaling beyond 2B increases Cost Per Acquisition drastically without proportional results.
             """)
         
         with c1_chart:
             fig_bucket = px.bar(
-                avg_cpa_by_bucket, 
-                x='spend_bucket', 
-                y='unique_cpa', 
-                color='spend_bucket',
-                title="Average Cost Per Student: Low vs High Spend",
-                color_discrete_map={'Low (<2B)': '#22c55e', 'High (>2B)': '#ef4444'}
+                avg_cpa_by_bucket, x='spend_bucket', y='unique_cpa', color='spend_bucket',
+                title="Avg Cost Per Student: Low vs High Spend",
+                color_discrete_map={'Low (<2B)': '#22c55e', 'High (>2B)': '#ef4444'},
+                labels={'unique_cpa': 'Avg CPA (Rp)', 'spend_bucket': 'Spend Level'}
             )
-            fig_bucket.update_layout(showlegend=False, yaxis_title="Avg Cost Per Student (Rp)")
+            fig_bucket.update_layout(showlegend=False)
             st.plotly_chart(fig_bucket, use_container_width=True)
 
         st.divider()
@@ -251,36 +254,20 @@ if not df.empty:
         
         with c2_text:
             st.subheader("2. 🎯 Fix the 'Click Objective'")
-            st.markdown("""
-            **The Argument:** Stop optimizing for "Traffic". Optimize for "Leads".
-            
-            **The Data Evidence:**
-            The scatter plot shows **Spend vs. Conversion Rate**.
-            
-            * **Trend:** As we spend more money (move right), the Conversion Rate drops (trend goes down).
-            * **Meaning:** If the objective was correct, this line should be flat. The drop proves we are buying "junk clicks" just to hit spend targets.
-            """)
+            st.markdown("**The Argument:** Stop optimizing for 'Traffic'. Optimize for 'Leads'. The drop in conversion rate at high spend proves we are attracting low-intent users.")
 
         with c2_chart:
-            # Replaced 'trendline="ols"' with manual calculation to fix ModuleNotFoundError
+            # Manual Trendline Calculation (No Statsmodels)
             fig_corr = px.scatter(
                 df, x='ads_spend', y='unique_cvr',
                 title="Correlation: Spend vs Conversion Rate",
-                labels={'ads_spend': 'Ad Spend', 'unique_cvr': 'Conversion Rate (%)'}
+                labels={'ads_spend': 'Ad Spend (Rp)', 'unique_cvr': 'Conversion Rate (%)'}
             )
-            
-            # Manual Trendline Calculation
             x_data = df['ads_spend']
             y_data = df['unique_cvr']
             if len(x_data) > 1:
-                # Calculate trendline (y = mx + b)
                 m, b = np.polyfit(x_data, y_data, 1)
-                fig_corr.add_trace(go.Scatter(
-                    x=x_data,
-                    y=m * x_data + b,
-                    mode='lines',
-                    name='Trend'
-                ))
+                fig_corr.add_trace(go.Scatter(x=x_data, y=m * x_data + b, mode='lines', name='Trend'))
 
             st.plotly_chart(fig_corr, use_container_width=True)
 
@@ -288,22 +275,14 @@ if not df.empty:
 
         # --- RECOMMENDATION 3: THE INFLATION GAP ---
         c3_text, c3_chart = st.columns([1, 1])
-        
-        # Calculate Totals
         total_leads_raw = df['ads_cta'].sum()
         total_leads_unique = df['ads_unique_cta'].sum()
         
         with c3_text:
             st.subheader("3. 📉 Reality Check: Total vs Unique")
             st.markdown(f"""
-            **The Argument:** Stop reporting "Total Leads". It is a vanity metric.
-            
-            **The Data Evidence:**
-            We compared the total reported leads vs actual unique people.
-            
-            * **Total Leads reported:** {total_leads_raw:,.0f}
-            * **Actual Unique People:** {total_leads_unique:,.0f}
-            * **The Gap:** We are over-reporting success by counting duplicates.
+            **The Argument:** Stop reporting 'Total Leads'. It is a vanity metric.
+            **The Gap:** We are over-reporting success. {total_leads_raw:,.0f} reported leads is actually only {total_leads_unique:,.0f} people.
             """)
 
         with c3_chart:
