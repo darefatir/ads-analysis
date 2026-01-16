@@ -115,7 +115,7 @@ if not df.empty:
             st.error("⚠️ Value Leaks (Inefficient)")
             st.dataframe(top_5_bad[['week_start_date', 'ads_spend', 'ads_unique_cta', 'unique_cpa']].style.format({'ads_spend': format_currency, 'unique_cpa': format_currency, 'ads_unique_cta': '{:,.0f}'}), hide_index=True, use_container_width=True)
 
-    # === TAB 3: DEEP DIVE (CPC vs BOOKING RATE) ===
+    # === TAB 3: DEEP DIVE ===
     with tab3:
         st.subheader("Diagnostic: Why does efficiency break at scale?")
         
@@ -159,10 +159,10 @@ if not df.empty:
             )
             st.plotly_chart(fig_trend, use_container_width=True)
 
-    # === TAB 4: THE "BEFORE VS AFTER" (REAL COMPARISON) ===
+    # === TAB 4: THE STRATEGIC COMPARISON TABLE ===
     with tab4:
         st.subheader("Strategic Impact: The 2 Billion Wall")
-        st.markdown("Comparing **Actual Performance** below and above the Rp 2 Billion threshold.")
+        st.markdown("Detailed breakdown of how performance degrades when crossing the spend threshold.")
         st.divider()
 
         # --- DATA CALCULATION FOR COMPARISON ---
@@ -175,62 +175,59 @@ if not df.empty:
         
         cpc_low = low_spend_weeks['calculated_cpc'].mean()
         cpc_high = high_spend_weeks['calculated_cpc'].mean()
-
-        leads_low = low_spend_weeks['ads_unique_cta'].mean()
-        leads_high = high_spend_weeks['ads_unique_cta'].mean()
+        
+        br_low = low_spend_weeks['booking_rate'].mean()
+        br_high = high_spend_weeks['booking_rate'].mean()
 
         # Calculate % Increase
         cpa_increase = ((cpa_high - cpa_low) / cpa_low) * 100
         cpc_increase = ((cpc_high - cpc_low) / cpc_low) * 100
+        br_increase = ((br_high - br_low) / br_low) * 100
 
         # --- VISUAL 1: THE "WALL" CHART ---
-        c1, c2 = st.columns([2, 1])
+        c1, c2 = st.columns([1, 1])
         
         with c1:
-            st.markdown("#### 1. Cost Efficiency Comparison")
+            st.markdown("#### 1. Visual Comparison")
             
             fig_wall = go.Figure()
-            
-            # Group 1: < 2B
             fig_wall.add_trace(go.Bar(
                 name='Efficient Zone (<2B)',
-                x=['Avg Cost Per Student (CPA)', 'Avg Cost Per Click (CPC)'],
+                x=['Avg Cost Per Student', 'Avg Cost Per Click'],
                 y=[cpa_low, cpc_low],
                 marker_color='#22c55e',
                 text=[f"Rp {cpa_low:,.0f}", f"Rp {cpc_low:,.0f}"],
                 textposition='auto'
             ))
-            
-            # Group 2: > 2B
             fig_wall.add_trace(go.Bar(
                 name='Inefficient Zone (>2B)',
-                x=['Avg Cost Per Student (CPA)', 'Avg Cost Per Click (CPC)'],
+                x=['Avg Cost Per Student', 'Avg Cost Per Click'],
                 y=[cpa_high, cpc_high],
                 marker_color='#ef4444',
                 text=[f"Rp {cpa_high:,.0f}", f"Rp {cpc_high:,.0f}"],
                 textposition='auto'
             ))
-            
-            fig_wall.update_layout(
-                title="The Impact of Over-Spending (Real Data)",
-                barmode='group',
-                template="plotly_white",
-                height=400
-            )
+            fig_wall.update_layout(title="The Cost Penalty", barmode='group', template="plotly_white", height=400)
             st.plotly_chart(fig_wall, use_container_width=True)
 
         with c2:
-            st.markdown("#### The Reality Check")
-            st.metric("CPA Increase", f"+{cpa_increase:.0f}%", "Cost to get a student", delta_color="inverse")
-            st.metric("CPC Increase", f"+{cpc_increase:.0f}%", "Cost to get a click", delta_color="inverse")
+            st.markdown("#### 2. Unit Economics Impact Table")
+            
+            # --- THE TABLE ---
+            summary_data = {
+                "Metric": ["Avg Cost Per Student (CPA)", "Avg Cost Per Click (CPC)", "Avg Booking Rate (Quality)"],
+                "Efficient Zone (<2B)": [f"Rp {cpa_low:,.0f}", f"Rp {cpc_low:,.0f}", f"{br_low:.2f}%"],
+                "Inefficient Zone (>2B)": [f"Rp {cpa_high:,.0f}", f"Rp {cpc_high:,.0f}", f"{br_high:.2f}%"],
+                "Variance (Impact)": [f"🔴 +{cpa_increase:.0f}% Cost", f"🔴 +{cpc_increase:.0f}% Cost", f"🟢 +{br_increase:.0f}% Quality"]
+            }
+            summary_df = pd.DataFrame(summary_data)
+            st.dataframe(summary_df, use_container_width=True, hide_index=True)
             
             st.info("""
-            **Analysis:**
-            Comparing actual weeks directly:
+            **Executive Takeaway:**
+            When we scale past 2B, we gain slightly better quality users (+19%), but we pay **double the price** for the clicks (+86%).
             
-            When we crossed the 2B line, we did get more volume, but we paid **significantly higher prices** for every single metric.
-            
-            **Verdict:** The extra volume is not worth the efficiency collapse.
+            This mismatch drives our Cost Per Student up by **6%**, reducing overall profitability.
             """)
 
         st.divider()
@@ -240,7 +237,7 @@ if not df.empty:
         col_a, col_b, col_c = st.columns(3)
         with col_a:
             st.markdown("#### 1. Capital Discipline")
-            st.markdown("Implement strict **Rp 2B Weekly Cap**. Scaling beyond this point consistently triggers the +40% cost penalty.")
+            st.markdown("Implement strict **Rp 2B Weekly Cap**. Scaling beyond this point consistently triggers the cost penalty.")
         with col_b:
             st.markdown("#### 2. Creative Engine")
             st.markdown(f"Our CPC is rising by **{cpc_increase:.0f}%**. We must launch 4 new creative angles/month to lower base costs.")
