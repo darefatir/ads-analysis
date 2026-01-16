@@ -11,7 +11,19 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- 2. LOAD DATA DYNAMICALLY ---
+# --- 2. SIDEBAR LEGEND (Appears on ALL Pages) ---
+with st.sidebar:
+    st.header("🎨 Legend: Performance")
+    st.markdown("How we define 'Good' vs 'Bad' weeks:")
+    
+    st.success("🟢 **Good (Efficient)**\n\nLowest Cost Per Lead (Best 25%)")
+    st.error("🔴 **Problem (Expensive)**\n\nHighest Cost Per Lead (Worst 25%)")
+    st.info("⚪ **Normal**\n\nAverage Performance")
+    
+    st.markdown("---")
+    st.markdown("**Key Metric:**\nCost Per **Unique** Lead (CPA)")
+
+# --- 3. LOAD DATA DYNAMICALLY ---
 @st.cache_data
 def load_data():
     try:
@@ -64,7 +76,7 @@ def load_data():
 
 df = load_data()
 
-# --- 3. DASHBOARD LAYOUT ---
+# --- 4. MAIN DASHBOARD LAYOUT ---
 
 if not df.empty:
     st.title("🚀 Sparks Edu: 2019 Ads Performance Case Study")
@@ -152,7 +164,7 @@ if not df.empty:
         
         col_insight_1, col_insight_2 = st.columns(2)
         
-        # --- INSIGHT A: SCALING TRAP (IMPROVED) ---
+        # --- INSIGHT A: SCALING TRAP ---
         with col_insight_1:
             st.subheader("A. The 'Scaling Trap'")
             st.markdown("""
@@ -215,7 +227,7 @@ if not df.empty:
             fig_bar_cvr.update_layout(title="Conversion Rate: Success vs Problem Weeks", yaxis_title="Conversion Rate (%)")
             st.plotly_chart(fig_bar_cvr, use_container_width=True)
 
-    # === TAB 4: RECOMMENDATIONS (RISK ANALYSIS ADDED) ===
+    # === TAB 4: RECOMMENDATIONS ===
     with tab4:
         st.header("4. Strategic Recommendations")
         st.markdown("Strategy adjustments based on the saturation point analysis.")
