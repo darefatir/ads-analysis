@@ -6,22 +6,19 @@ import numpy as np
 
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(
-    page_title="Sparks Edu: 2019 Performance Review",
-    page_icon="🚀",
+    page_title="Sparks Edu: Executive Strategy Deck",
+    page_icon="📊",
     layout="wide"
 )
 
 # --- 2. SIDEBAR LEGEND ---
 with st.sidebar:
-    st.header("🎨 Legend: Performance")
-    st.markdown("How we define 'Good' vs 'Bad' weeks:")
-    
-    st.success("🟢 **Good (Efficient)**\n\nLowest Cost Per Lead (Best 25%)")
-    st.error("🔴 **Problem (Expensive)**\n\nHighest Cost Per Lead (Worst 25%)")
-    st.info("⚪ **Normal**\n\nAverage Performance")
-    
+    st.header("Executive Summary")
+    st.info("📊 **Analysis Context**\n\nComparing **efficiency** across spend levels to determine optimal scaling strategy.")
     st.markdown("---")
-    st.markdown("**Key Metric:**\nCost Per **Unique** Lead (CPA)")
+    st.markdown("**Definitions:**")
+    st.success("🟢 **Efficient Zone**\nSpend < 2B/week")
+    st.error("🔴 **Inefficient Zone**\nSpend > 2B/week")
 
 # --- 3. LOAD DATA DYNAMICALLY ---
 @st.cache_data
@@ -48,11 +45,6 @@ def load_data():
         df['booking_rate'] = df.apply(lambda x: (x['ads_cta'] / x['ads_click']) * 100 if x['ads_click'] > 0 else 0, axis=1)
         df['calculated_cpc'] = df.apply(lambda x: x['ads_spend'] / x['ads_click'] if x['ads_click'] > 0 else 0, axis=1)
         
-        # --- SMOOTHING (MOVING AVERAGES) ---
-        # Calculate 4-Week Rolling Average to remove noise/volatility
-        df['cpc_smooth'] = df['calculated_cpc'].rolling(window=4, min_periods=1).mean()
-        df['booking_rate_smooth'] = df['booking_rate'].rolling(window=4, min_periods=1).mean()
-        
         # STATUS DEFINITION
         cpa_25 = df['unique_cpa'].quantile(0.25)
         cpa_75 = df['unique_cpa'].quantile(0.75)
@@ -74,203 +66,163 @@ df = load_data()
 # --- 4. MAIN DASHBOARD LAYOUT ---
 
 if not df.empty:
-    st.title("🚀 Sparks Edu: 2019 Ads Performance Case Study")
-    st.markdown("""
-    **Objective:** Analyze 2019 Weekly Ads Data to identify efficiency gaps.
-    <br>
-    **Key Metric:** `Unique CPA` (Cost per *New* Student Lead).
-    """, unsafe_allow_html=True)
-    
-    # Global Metrics
-    total_spend = df['ads_spend'].sum()
-    total_unique_leads = df['ads_unique_cta'].sum()
-    avg_unique_cpa = total_spend / total_unique_leads if total_unique_leads > 0 else 0
-    
-    # Top KPI Row
-    kpi1, kpi2, kpi3 = st.columns(3)
-    kpi1.metric("Total Investment (2019)", f"Rp {total_spend/1e9:.2f} B")
-    kpi2.metric("Total Unique Leads", f"{total_unique_leads:,.0f}")
-    kpi3.metric("Avg Cost Per Unique Lead", f"Rp {avg_unique_cpa:,.0f}")
-    
+    st.title("🚀 Sparks Edu: Strategic Performance Review")
+    st.markdown("### FY2019 Ad Performance & Optimization Plan")
     st.divider()
 
     # --- TABS ---
-    tab1, tab2, tab3, tab4 = st.tabs(["1. The Big Picture", "2. Success vs Failure", "3. Deep Dive Insights", "4. Strategic Plan"])
+    tab1, tab2, tab3, tab4 = st.tabs(["1. Performance Snapshot", "2. Efficiency Audit", "3. Deep Dive Diagnostics", "4. Strategic Imperatives"])
 
     # === TAB 1: SNAPSHOT ===
     with tab1:
-        st.header("1. The Big Picture")
-        st.markdown("### Spending vs Results Trend")
+        st.subheader("Executive Overview: Spend vs. Acquisition")
+        
+        # High Level Metrics
+        total_spend = df['ads_spend'].sum()
+        total_unique_leads = df['ads_unique_cta'].sum()
+        avg_unique_cpa = total_spend / total_unique_leads if total_unique_leads > 0 else 0
+        
+        k1, k2, k3 = st.columns(3)
+        k1.metric("Total Investment", f"Rp {total_spend/1e9:.2f} B")
+        k2.metric("Total Unique Leads", f"{total_unique_leads:,.0f}")
+        k3.metric("Avg Cost Per Lead", f"Rp {avg_unique_cpa:,.0f}")
+        
+        st.markdown("---")
+        
         fig_dual = go.Figure()
-        fig_dual.add_trace(go.Bar(x=df['week_start_date'], y=df['ads_spend'], name='Ad Spend (Rp)', marker_color='#cbd5e1', opacity=0.7))
-        fig_dual.add_trace(go.Scatter(x=df['week_start_date'], y=df['ads_unique_cta'], name='Unique Leads', yaxis='y2', line=dict(color='#2563eb', width=3), mode='lines+markers'))
-        fig_dual.update_layout(title="Weekly Spend vs. Unique Leads Generated", yaxis=dict(title='Spend (IDR)', showgrid=False), yaxis2=dict(title='Unique Leads', overlaying='y', side='right', showgrid=False), legend=dict(orientation="h", y=1.1), hovermode='x unified', template="plotly_white", height=500)
+        fig_dual.add_trace(go.Bar(x=df['week_start_date'], y=df['ads_spend'], name='Ad Spend (Rp)', marker_color='#94a3b8', opacity=0.6))
+        fig_dual.add_trace(go.Scatter(x=df['week_start_date'], y=df['ads_unique_cta'], name='Unique Leads', yaxis='y2', line=dict(color='#0f172a', width=3)))
+        fig_dual.update_layout(title="Weekly Volume: Spend vs Unique Leads", yaxis=dict(title='Spend (IDR)', showgrid=False), yaxis2=dict(title='Unique Leads', overlaying='y', side='right', showgrid=False), legend=dict(orientation="h", y=1.1), hovermode='x unified', template="plotly_white", height=450)
         st.plotly_chart(fig_dual, use_container_width=True)
 
     # === TAB 2: EXTREMES ===
     with tab2:
-        st.header("2. Identifying Performance Extremes")
-        st.markdown("We analyze **Efficiency**: How much did we pay for each new student?")
+        st.subheader("Efficiency Audit: Identifying Value Leaks")
         
-        fig_status = px.scatter(df, x='week_start_date', y='unique_cpa', color='status', size='ads_spend', color_discrete_map={'Good (Efficient)': '#22c55e', 'Problem (Expensive)': '#ef4444', 'Normal': '#94a3b8'}, title="Timeline: Cost Per Unique Lead (CPA)", labels={'unique_cpa': 'CPA - Cost Per Acquisition (Rp)', 'week_start_date': 'Week'})
+        fig_status = px.scatter(df, x='week_start_date', y='unique_cpa', color='status', size='ads_spend', color_discrete_map={'Good (Efficient)': '#22c55e', 'Problem (Expensive)': '#ef4444', 'Normal': '#cbd5e1'}, title="Cost Efficiency Timeline (Green = Efficient, Red = Expensive)", labels={'unique_cpa': 'CPA (Rp)', 'week_start_date': 'Week'})
         st.plotly_chart(fig_status, use_container_width=True)
-        st.divider()
-
+        
         col_good, col_bad = st.columns(2)
         top_5_good = df.nsmallest(5, 'unique_cpa')
         top_5_bad = df.nlargest(5, 'unique_cpa')
         def format_currency(x): return f"Rp {x:,.0f}"
 
         with col_good:
-            st.success("✅ 'Success' Weeks (Efficient)")
+            st.success("✅ Top Performers (Benchmark)")
             st.dataframe(top_5_good[['week_start_date', 'ads_spend', 'ads_unique_cta', 'unique_cpa']].style.format({'ads_spend': format_currency, 'unique_cpa': format_currency, 'ads_unique_cta': '{:,.0f}'}), hide_index=True, use_container_width=True)
 
         with col_bad:
-            st.error("⚠️ 'Problem' Weeks (Expensive)")
+            st.error("⚠️ Value Leaks (Inefficient)")
             st.dataframe(top_5_bad[['week_start_date', 'ads_spend', 'ads_unique_cta', 'unique_cpa']].style.format({'ads_spend': format_currency, 'unique_cpa': format_currency, 'ads_unique_cta': '{:,.0f}'}), hide_index=True, use_container_width=True)
 
-    # === TAB 3: INSIGHTS (SMOOTHED CHART) ===
+    # === TAB 3: DEEP DIVE (THE NEW "LOUD" CHART) ===
     with tab3:
-        st.header("3. Deep Dive Insights")
+        st.subheader("Diagnostic: Why does efficiency break at scale?")
         
-        # --- 1. THE PRICE OF QUALITY CHART (SMOOTHED) ---
-        st.subheader("A. The 'Price of Quality' Trap")
+        # --- DATA PREP FOR "LOUD" CHART ---
+        low_spend = df[df['ads_spend'] < 2e9]
+        high_spend = df[df['ads_spend'] >= 2e9]
         
-        # Calculation for Table
-        low_spend_df = df[df['ads_spend'] < 2e9]
-        high_spend_df = df[df['ads_spend'] >= 2e9]
-        
-        avg_cpc_low = low_spend_df['calculated_cpc'].mean()
-        avg_cpc_high = high_spend_df['calculated_cpc'].mean()
+        avg_cpc_low = low_spend['calculated_cpc'].mean()
+        avg_cpc_high = high_spend['calculated_cpc'].mean()
         cpc_growth = ((avg_cpc_high - avg_cpc_low) / avg_cpc_low) * 100
         
-        avg_br_low = low_spend_df['booking_rate'].mean()
-        avg_br_high = high_spend_df['booking_rate'].mean()
+        avg_br_low = low_spend['booking_rate'].mean()
+        avg_br_high = high_spend['booking_rate'].mean()
         br_growth = ((avg_br_high - avg_br_low) / avg_br_low) * 100
         
-        col_chart, col_table = st.columns([2, 1])
-        
-        with col_chart:
-            fig_cpc = go.Figure()
-            
-            # RAW DATA (Faint)
-            fig_cpc.add_trace(go.Scatter(x=df['week_start_date'], y=df['calculated_cpc'], name='CPC (Raw)', line=dict(color='#ef4444', width=1, dash='dot'), opacity=0.3, showlegend=False))
-            fig_cpc.add_trace(go.Scatter(x=df['week_start_date'], y=df['booking_rate'], name='Booking Rate (Raw)', yaxis='y2', line=dict(color='#22c55e', width=1, dash='dot'), opacity=0.3, showlegend=False))
-            
-            # TREND LINES (Thick & Smooth)
-            fig_cpc.add_trace(go.Scatter(x=df['week_start_date'], y=df['cpc_smooth'], name='Cost Trend (4-Week Avg)', line=dict(color='#ef4444', width=4)))
-            fig_cpc.add_trace(go.Scatter(x=df['week_start_date'], y=df['booking_rate_smooth'], name='Quality Trend (4-Week Avg)', yaxis='y2', line=dict(color='#22c55e', width=4)))
-            
-            fig_cpc.update_layout(
-                title="Trend: Cost (Red) vs Quality (Green)",
-                yaxis=dict(title=dict(text='Cost Per Click (IDR)', font=dict(color='#ef4444')), tickfont=dict(color='#ef4444'), showgrid=False, rangemode="tozero"),
-                yaxis2=dict(title=dict(text='Booking Rate (%)', font=dict(color='#22c55e')), tickfont=dict(color='#22c55e'), overlaying='y', side='right', showgrid=False, rangemode="tozero"),
-                hovermode='x unified', template="plotly_white", legend=dict(orientation="h", y=1.1)
-            )
-            st.plotly_chart(fig_cpc, use_container_width=True)
-
-        with col_table:
-            st.markdown("##### 📉 ROI Reality Check")
-            st.info("Comparing Low Spend (<2B) vs High Spend (>2B):")
-            
-            comparison_data = {
-                "Metric": ["Avg Cost Per Click", "Avg Booking Rate"],
-                "Low Spend (<2B)": [f"Rp {avg_cpc_low:,.0f}", f"{avg_br_low:.1f}%"],
-                "High Spend (>2B)": [f"Rp {avg_cpc_high:,.0f}", f"{avg_br_high:.1f}%"],
-                "Difference": [f"🔺 +{cpc_growth:.0f}% (COST)", f"🟢 +{br_growth:.0f}% (QUALITY)"]
-            }
-            comp_df = pd.DataFrame(comparison_data)
-            st.dataframe(comp_df, hide_index=True, use_container_width=True)
-            
-            st.error(f"""
-            **The Trap:**
-            Cost increased by **{cpc_growth:.0f}%**, but Quality only increased by **{br_growth:.0f}%**.
-            
-            We are paying a premium that eats our profits.
-            """)
-        
-        st.divider()
-        
-        # --- 2. SATURATION POINT ---
-        col_insight_1, col_insight_2 = st.columns(2)
+        col_insight_1, col_insight_2 = st.columns([1, 1])
         
         with col_insight_1:
-            st.subheader("B. The Saturation Point")
-            df['chart_label'] = df.apply(lambda x: x['week_start_date'].strftime('%d %b') if x['status'] == 'Problem (Expensive)' else '', axis=1)
-
-            fig_scatter = px.scatter(df, x='ads_spend', y='unique_cpa', size='ads_unique_cta', color='status', color_discrete_map={'Good (Efficient)': '#22c55e', 'Problem (Expensive)': '#ef4444', 'Normal': '#94a3b8'}, title="Spend vs. CPA (The 'Elbow' Curve)", labels={'ads_spend': 'Total Weekly Spend (Rp)', 'unique_cpa': 'CPA (Rp)', 'ads_unique_cta': 'Leads Volume', 'status': 'Status'}, text='chart_label')
-            fig_scatter.add_vline(x=2000000000, line_dash="dash", line_color="black", annotation_text="Risk Threshold (2B)", annotation_position="top left")
-            fig_scatter.update_traces(textposition='top center')
-            fig_scatter.update_layout(showlegend=True)
-            st.plotly_chart(fig_scatter, use_container_width=True)
+            st.markdown("#### The Unit Economics Gap")
+            st.markdown("Comparing the **Cost Increase** vs **Quality Increase** when scaling past 2B.")
+            
+            # THE "LOUD" BAR CHART
+            fig_gap = go.Figure()
+            fig_gap.add_trace(go.Bar(
+                x=['Cost Per Click (Cost)', 'Booking Rate (Quality)'],
+                y=[cpc_growth, br_growth],
+                text=[f"+{cpc_growth:.0f}%", f"+{br_growth:.0f}%"],
+                textposition='auto',
+                marker_color=['#ef4444', '#22c55e']
+            ))
+            fig_gap.update_layout(
+                title="The Scaling Penalty: Cost vs Value",
+                yaxis_title="Growth % (High Spend vs Low Spend)",
+                template="plotly_white"
+            )
+            st.plotly_chart(fig_gap, use_container_width=True)
+            
+            st.error(f"**Insight:** Costs exploded by **{cpc_growth:.0f}%**, but quality only improved by **{br_growth:.0f}%**. We are paying a premium for diminishing returns.")
 
         with col_insight_2:
-            st.subheader("C. Intent Analysis")
-            avg_cvr_good = top_5_good['booking_rate'].mean()
-            avg_cvr_bad = top_5_bad['booking_rate'].mean()
-            fig_bar_cvr = go.Figure(data=[go.Bar(name='Success Weeks', x=['Success Weeks'], y=[avg_cvr_good], marker_color='#22c55e', text=[f"{avg_cvr_good:.1f}%"], textposition='auto'), go.Bar(name='Problem Weeks', x=['Problem Weeks'], y=[avg_cvr_bad], marker_color='#ef4444', text=[f"{avg_cvr_bad:.1f}%"], textposition='auto')])
-            fig_bar_cvr.update_layout(title="Booking Rate: Success vs Problem Weeks", yaxis_title="Booking Rate (%)")
-            st.plotly_chart(fig_bar_cvr, use_container_width=True)
+            st.markdown("#### The Saturation Point")
+            df['chart_label'] = df.apply(lambda x: x['week_start_date'].strftime('%d %b') if x['status'] == 'Problem (Expensive)' else '', axis=1)
+            fig_scatter = px.scatter(df, x='ads_spend', y='unique_cpa', size='ads_unique_cta', color='status', color_discrete_map={'Good (Efficient)': '#22c55e', 'Problem (Expensive)': '#ef4444', 'Normal': '#cbd5e1'}, title="Spend vs. CPA (The 'Elbow')", labels={'ads_spend': 'Total Weekly Spend (Rp)', 'unique_cpa': 'CPA (Rp)', 'ads_unique_cta': 'Leads Volume'}, text='chart_label')
+            fig_scatter.add_vline(x=2000000000, line_dash="dash", line_color="black", annotation_text="Optimal Threshold (2B)")
+            fig_scatter.update_traces(textposition='top center')
+            st.plotly_chart(fig_scatter, use_container_width=True)
 
-    # === TAB 4: FINAL STRATEGY ===
+    # === TAB 4: STRATEGIC PLAN (CONSULTING STYLE) ===
     with tab4:
-        st.header("4. Final Strategic Proposal")
-        st.markdown("Based on the data audit, we propose **3 Pillars** for the new marketing strategy.")
+        st.subheader("Strategic Roadmap: Path to Optimization")
+        
+        st.markdown("""
+        Based on the diagnostic audit, we have identified three strategic imperatives to restore unit economics.
+        """)
+        
         st.divider()
 
-        # --- PILLAR 1 ---
-        c1_text, c1_chart = st.columns([1, 1])
-        df['spend_bucket'] = df['ads_spend'].apply(lambda x: 'Safe Zone (<2B)' if x < 2000000000 else 'High Risk (>2B)')
-        risk_data = df.groupby('spend_bucket')['status'].value_counts(normalize=True).unstack().fillna(0) * 100
-        
-        prob_bad_high = risk_data.loc['High Risk (>2B)', 'Problem (Expensive)'] if 'High Risk (>2B)' in risk_data.index and 'Problem (Expensive)' in risk_data.columns else 0
-        
-        with c1_text:
-            st.subheader("1. 🛑 The Financial Guardrail")
-            st.markdown(f"""
-            **The Rule:** Implement a strict weekly spend cap of **Rp 2 Billion**.
+        # --- STRATEGY 1 ---
+        c1, c2 = st.columns([3, 1])
+        with c1:
+            st.markdown("### 1. Enforce Capital Discipline (The '2B Checkpoint')")
+            st.markdown("""
+            **Situation:** Historical data indicates a break in efficiency elasticity when weekly spend exceeds Rp 2 Billion.
             
-            **The Reason:**
-            * Our analysis confirms that spending >2B has a **{prob_bad_high:.1f}% probability of failure** (Inefficiency).
-            * We must stop "forcing" spend into a saturated audience.
+            **Complication:** Beyond this threshold, the probability of entering the "Inefficient Zone" doubles, driving CPA up by ~6% without proportional volume gains.
+            
+            **Strategic Resolution:** * Implement a **soft cap of Rp 2 Billion/week**. 
+            * Scaling beyond this requires CEO approval or a maintained CPA < Rp 80k.
             """)
-            st.markdown("##### 📋 Data Proof")
-            st.dataframe(risk_data.style.format("{:.1f}%"), use_container_width=True)
-        
-        with c1_chart:
-            fig_risk = px.bar(risk_data.reset_index(), x='spend_bucket', y=['Good (Efficient)', 'Normal', 'Problem (Expensive)'], title="Risk Profile: Probability of Failure", color_discrete_map={'Good (Efficient)': '#22c55e', 'Normal': '#cbd5e1', 'Problem (Expensive)': '#ef4444'}, labels={'value': 'Probability (%)', 'variable': 'Outcome'})
-            st.plotly_chart(fig_risk, use_container_width=True)
-
-        st.divider()
-
-        # --- PILLAR 2 & 3 ---
-        c2, c3 = st.columns(2)
-        
         with c2:
-            st.subheader("2. 🎨 The Creative Pivot")
-            st.markdown("""
-            **The Problem:** We are suffering from the "Premium Trap." We pay +127% more per click to get +55% better users. This destroys ROI.
-            
-            **The Solution:**
-            * **Attack CPC:** The root cause is high Cost Per Click.
-            * **Action:** Launch **4 New Creative Angles** per month. We need fresh ads to find cheaper clicks, rather than bidding higher on old ads.
-            """)
+            st.metric("Risk Probability", "High (>28%)", delta="If Spend > 2B", delta_color="inverse")
 
+        st.divider()
+
+        # --- STRATEGY 2 ---
+        c3, c4 = st.columns([3, 1])
         with c3:
-            st.subheader("3. 📉 The Truth Standard")
-            st.markdown("""
-            **The Problem:** We have been reporting "Total Leads," which inflates our success by counting the same person multiple times.
+            st.markdown("### 2. Revitalize Creative Unit Economics")
+            st.markdown(f"""
+            **Situation:** Our Cost Per Click (CPC) has inflated by **{cpc_growth:.0f}%** during high-spend periods.
             
-            **The Solution:**
-            * **Action:** All boardroom reports must use **Unique CPA** (Cost Per New Student) as the primary KPI.
-            * **Impact:** This gives us a realistic view of our growth cost.
+            **Complication:** We are currently compensating for expensive clicks with slightly higher booking rates (+{br_growth:.0f}%), but the math is net-negative. We are effectively bidding against ourselves in a saturated audience.
+            
+            **Strategic Resolution:** * Pivot focus from "Bidding Higher" to "Lowering Click Costs." 
+            * **Mandate:** Launch 4 new creative concepts monthly to combat ad fatigue and lower base CPC.
             """)
+        with c4:
+            st.metric("Cost Inflation", f"+{cpc_growth:.0f}%", delta="Avg CPC Spike", delta_color="inverse")
+
+        st.divider()
+
+        # --- STRATEGY 3 ---
+        c5, c6 = st.columns([3, 1])
+        with c5:
+            st.markdown("### 3. Calibrate Performance Metrics")
+            st.markdown("""
+            **Situation:** Current reporting relies on 'Total Leads,' creating a disconnect between reported success and actual growth.
             
-            total_leads_raw = df['ads_cta'].sum()
-            total_leads_unique = df['ads_unique_cta'].sum()
-            fig_gap = go.Figure(data=[go.Bar(name='Reported (Inflated)', x=['Metrics'], y=[total_leads_raw], marker_color='#94a3b8'), go.Bar(name='Actual (Truth)', x=['Metrics'], y=[total_leads_unique], marker_color='#2563eb')])
-            fig_gap.update_layout(title="The Inflation Gap", barmode='group', height=300)
-            st.plotly_chart(fig_gap, use_container_width=True)
+            **Complication:** This inflates perceived performance by counting duplicate leads, masking the true cost of acquiring *new* students.
+            
+            **Strategic Resolution:** * Retire 'Total Leads' from executive dashboards.
+            * Standardize **'Unique CPA'** as the North Star metric for all ROI calculations effectively immediately.
+            """)
+        with c6:
+            # Calculate Lead Gap
+            gap = df['ads_cta'].sum() - df['ads_unique_cta'].sum()
+            st.metric("Inflation Gap", f"{gap:,.0f}", delta="Duplicate Leads", delta_color="inverse")
 
         st.caption("Generated for Sparks Edu Case Study | Data Source: 2019 Ads Export")
 
