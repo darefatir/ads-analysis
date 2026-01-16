@@ -71,7 +71,7 @@ if not df.empty:
     st.divider()
 
     # --- TABS ---
-    tab1, tab2, tab3, tab4 = st.tabs(["1. Performance Snapshot", "2. Efficiency Audit", "3. Deep Dive Diagnostics", "4. Strategic Impact Model"])
+    tab1, tab2, tab3, tab4 = st.tabs(["1. Performance Snapshot", "2. Efficiency Audit", "3. Deep Dive Diagnostics", "4. Strategic Comparison"])
 
     # === TAB 1: SNAPSHOT ===
     with tab1:
@@ -115,7 +115,7 @@ if not df.empty:
             st.error("⚠️ Value Leaks (Inefficient)")
             st.dataframe(top_5_bad[['week_start_date', 'ads_spend', 'ads_unique_cta', 'unique_cpa']].style.format({'ads_spend': format_currency, 'unique_cpa': format_currency, 'ads_unique_cta': '{:,.0f}'}), hide_index=True, use_container_width=True)
 
-    # === TAB 3: DEEP DIVE (THE NEW "LOUD" CHART) ===
+    # === TAB 3: DEEP DIVE (CPC vs BOOKING RATE) ===
     with tab3:
         st.subheader("Diagnostic: Why does efficiency break at scale?")
         
@@ -135,116 +135,118 @@ if not df.empty:
         
         with col_insight_1:
             st.markdown("#### The Unit Economics Gap")
-            st.markdown("Comparing the **Cost Increase** vs **Quality Increase** when scaling past 2B.")
             
-            # THE "LOUD" BAR CHART
-            fig_gap = go.Figure()
-            fig_gap.add_trace(go.Bar(
-                x=['Cost Per Click (Cost)', 'Booking Rate (Quality)'],
-                y=[cpc_growth, br_growth],
-                text=[f"+{cpc_growth:.0f}%", f"+{br_growth:.0f}%"],
-                textposition='auto',
-                marker_color=['#ef4444', '#22c55e']
-            ))
-            fig_gap.update_layout(
-                title="The Scaling Penalty: Cost vs Value",
-                yaxis_title="Growth % (High Spend vs Low Spend)",
-                template="plotly_white"
-            )
-            st.plotly_chart(fig_gap, use_container_width=True)
-            
-            st.error(f"**Insight:** Costs exploded by **{cpc_growth:.0f}%**, but quality only improved by **{br_growth:.0f}%**. We are paying a premium for diminishing returns.")
+            # Simple Text Comparison
+            st.info(f"**When we scale (Spend > 2B):**")
+            st.write(f"1. Cost Per Click jumps by **{cpc_growth:.0f}%** 🔴")
+            st.write(f"2. Booking Rate improves by **{br_growth:.0f}%** 🟢")
+            st.error(f"**Result:** We pay {cpc_growth:.0f}% more to get a {br_growth:.0f}% benefit. This is why we lose money.")
 
         with col_insight_2:
-            st.markdown("#### The Saturation Point")
-            df['chart_label'] = df.apply(lambda x: x['week_start_date'].strftime('%d %b') if x['status'] == 'Problem (Expensive)' else '', axis=1)
-            fig_scatter = px.scatter(df, x='ads_spend', y='unique_cpa', size='ads_unique_cta', color='status', color_discrete_map={'Good (Efficient)': '#22c55e', 'Problem (Expensive)': '#ef4444', 'Normal': '#cbd5e1'}, title="Spend vs. CPA (The 'Elbow')", labels={'ads_spend': 'Total Weekly Spend (Rp)', 'unique_cpa': 'CPA (Rp)', 'ads_unique_cta': 'Leads Volume'}, text='chart_label')
-            fig_scatter.add_vline(x=2000000000, line_dash="dash", line_color="black", annotation_text="Optimal Threshold (2B)")
-            fig_scatter.update_traces(textposition='top center')
-            st.plotly_chart(fig_scatter, use_container_width=True)
+            st.markdown("#### The Visual Proof (Trend)")
+            # Standard Line Chart of CPC vs Booking Rate to show the gap
+            fig_trend = go.Figure()
+            fig_trend.add_trace(go.Scatter(x=df['week_start_date'], y=df['calculated_cpc'], name='CPC (Cost)', line=dict(color='#ef4444', width=3)))
+            fig_trend.add_trace(go.Scatter(x=df['week_start_date'], y=df['booking_rate'], name='Booking Rate (Quality)', yaxis='y2', line=dict(color='#22c55e', width=3)))
+            
+            fig_trend.update_layout(
+                title="Trend: Cost skyrocketing vs Quality flatlining",
+                yaxis=dict(title='CPC (IDR)', showgrid=False),
+                yaxis2=dict(title='Booking Rate (%)', overlaying='y', side='right', showgrid=False),
+                hovermode='x unified',
+                template="plotly_white",
+                legend=dict(orientation="h", y=1.1)
+            )
+            st.plotly_chart(fig_trend, use_container_width=True)
 
-    # === TAB 4: STRATEGIC SIMULATION (BEFORE vs AFTER) ===
+    # === TAB 4: THE "BEFORE VS AFTER" (REAL COMPARISON) ===
     with tab4:
-        st.subheader("Strategic Impact Model: 'Before vs After' Analysis")
-        st.markdown("We simulated the impact of implementing the **'Efficiency Strategy'** (Capping Spend & Optimizing Creative) on the 2019 data.")
+        st.subheader("Strategic Impact: The 2 Billion Wall")
+        st.markdown("Comparing **Actual Performance** below and above the Rp 2 Billion threshold.")
         st.divider()
 
-        # --- SIMULATION LOGIC ---
-        # 1. Actuals
-        actual_spend = df['ads_spend'].sum()
-        actual_leads = df['ads_unique_cta'].sum()
-        actual_cpa = actual_spend / actual_leads
+        # --- DATA CALCULATION FOR COMPARISON ---
+        low_spend_weeks = df[df['ads_spend'] < 2e9]
+        high_spend_weeks = df[df['ads_spend'] >= 2e9]
+
+        # Key Metrics Averages
+        cpa_low = low_spend_weeks['unique_cpa'].mean()
+        cpa_high = high_spend_weeks['unique_cpa'].mean()
         
-        # 2. Optimized Scenario: 
-        # Assume we could have acquired the SAME number of leads, but at the "Efficient CPA" (Safe Zone Average)
-        efficient_cpa = df[df['ads_spend'] < 2e9]['unique_cpa'].mean()
-        optimized_spend = actual_leads * efficient_cpa
-        
-        savings = actual_spend - optimized_spend
-        savings_pct = (savings / actual_spend) * 100
-        
-        # --- VISUALIZATION: BEFORE vs AFTER ---
+        cpc_low = low_spend_weeks['calculated_cpc'].mean()
+        cpc_high = high_spend_weeks['calculated_cpc'].mean()
+
+        leads_low = low_spend_weeks['ads_unique_cta'].mean()
+        leads_high = high_spend_weeks['ads_unique_cta'].mean()
+
+        # Calculate % Increase
+        cpa_increase = ((cpa_high - cpa_low) / cpa_low) * 100
+        cpc_increase = ((cpc_high - cpc_low) / cpc_low) * 100
+
+        # --- VISUAL 1: THE "WALL" CHART ---
         c1, c2 = st.columns([2, 1])
         
         with c1:
-            st.markdown("#### Scenario: What if we maintained efficiency all year?")
+            st.markdown("#### 1. Cost Efficiency Comparison")
             
-            fig_sim = go.Figure()
-            # Bar 1: Actual
-            fig_sim.add_trace(go.Bar(
-                name='Actual 2019 Spend',
-                x=['Total Spend'],
-                y=[actual_spend],
-                marker_color='#94a3b8',
-                text=[f"Rp {actual_spend/1e9:.1f} B"],
-                textposition='auto'
-            ))
-            # Bar 2: Optimized
-            fig_sim.add_trace(go.Bar(
-                name='Optimized Spend (Same Leads)',
-                x=['Total Spend'],
-                y=[optimized_spend],
+            fig_wall = go.Figure()
+            
+            # Group 1: < 2B
+            fig_wall.add_trace(go.Bar(
+                name='Efficient Zone (<2B)',
+                x=['Avg Cost Per Student (CPA)', 'Avg Cost Per Click (CPC)'],
+                y=[cpa_low, cpc_low],
                 marker_color='#22c55e',
-                text=[f"Rp {optimized_spend/1e9:.1f} B"],
+                text=[f"Rp {cpa_low:,.0f}", f"Rp {cpc_low:,.0f}"],
                 textposition='auto'
             ))
             
-            fig_sim.update_layout(
-                title="Potential Savings Calculator",
-                yaxis_title="Total Spend (IDR)",
+            # Group 2: > 2B
+            fig_wall.add_trace(go.Bar(
+                name='Inefficient Zone (>2B)',
+                x=['Avg Cost Per Student (CPA)', 'Avg Cost Per Click (CPC)'],
+                y=[cpa_high, cpc_high],
+                marker_color='#ef4444',
+                text=[f"Rp {cpa_high:,.0f}", f"Rp {cpc_high:,.0f}"],
+                textposition='auto'
+            ))
+            
+            fig_wall.update_layout(
+                title="The Impact of Over-Spending (Real Data)",
                 barmode='group',
                 template="plotly_white",
                 height=400
             )
-            st.plotly_chart(fig_sim, use_container_width=True)
+            st.plotly_chart(fig_wall, use_container_width=True)
 
         with c2:
-            st.markdown("### 💰 The Opportunity")
-            st.metric("Potential Savings", f"Rp {savings/1e9:.2f} Billion", delta=f"{savings_pct:.1f}% Savings", delta_color="normal")
+            st.markdown("#### The Reality Check")
+            st.metric("CPA Increase", f"+{cpa_increase:.0f}%", "Cost to get a student", delta_color="inverse")
+            st.metric("CPC Increase", f"+{cpc_increase:.0f}%", "Cost to get a click", delta_color="inverse")
             
             st.info("""
             **Analysis:**
-            If we had avoided the "High Spend / High CPA" trap and maintained our baseline efficiency:
+            Comparing actual weeks directly:
             
-            * We could have acquired the **same 400k+ students**.
-            * But for **Rp 8.9 Billion less**.
+            When we crossed the 2B line, we did get more volume, but we paid **significantly higher prices** for every single metric.
             
-            **Recommendation:** Reinvest these savings into creative testing to lower CPC further.
+            **Verdict:** The extra volume is not worth the efficiency collapse.
             """)
 
         st.divider()
-        st.subheader("Detailed Strategic Imperatives")
 
+        # --- STRATEGIC IMPERATIVES ---
+        st.subheader("Final Recommendations")
         col_a, col_b, col_c = st.columns(3)
         with col_a:
             st.markdown("#### 1. Capital Discipline")
-            st.markdown("Implement strict **Rp 2B Weekly Cap**. High spend creates diminishing returns.")
+            st.markdown("Implement strict **Rp 2B Weekly Cap**. Scaling beyond this point consistently triggers the +40% cost penalty.")
         with col_b:
             st.markdown("#### 2. Creative Engine")
-            st.markdown("Launch **4 New Creatives/Month**. Lowering CPC is the only way to scale efficiently.")
+            st.markdown(f"Our CPC is rising by **{cpc_increase:.0f}%**. We must launch 4 new creative angles/month to lower base costs.")
         with col_c:
             st.markdown("#### 3. Truth Metrics")
-            st.markdown("Report on **Unique CPA** only. Stop reporting 'Total Leads' vanity metrics.")
+            st.markdown("Stop reporting 'Total Leads'. Use **Unique CPA** to see the true cost of growth.")
 
         st.caption("Generated for Sparks Edu Case Study | Data Source: 2019 Ads Export")
 
