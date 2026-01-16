@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
+import numpy as np  # Added for manual trendline calculation
 
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(
@@ -205,7 +206,7 @@ if not df.empty:
             This means we bought tons of "low quality" clicks.
             """)
 
-    # === TAB 4: RECOMMENDATIONS (UPDATED WITH VISUALS) ===
+    # === TAB 4: RECOMMENDATIONS (UPDATED: MANUAL TRENDLINE) ===
     with tab4:
         st.header("4. Strategic Recommendations")
         st.markdown("We propose 3 strategic shifts backed by data evidence.")
@@ -261,11 +262,26 @@ if not df.empty:
             """)
 
         with c2_chart:
+            # Replaced 'trendline="ols"' with manual calculation to fix ModuleNotFoundError
             fig_corr = px.scatter(
-                df, x='ads_spend', y='unique_cvr', trendline="ols",
+                df, x='ads_spend', y='unique_cvr',
                 title="Correlation: Spend vs Conversion Rate",
                 labels={'ads_spend': 'Ad Spend', 'unique_cvr': 'Conversion Rate (%)'}
             )
+            
+            # Manual Trendline Calculation
+            x_data = df['ads_spend']
+            y_data = df['unique_cvr']
+            if len(x_data) > 1:
+                # Calculate trendline (y = mx + b)
+                m, b = np.polyfit(x_data, y_data, 1)
+                fig_corr.add_trace(go.Scatter(
+                    x=x_data,
+                    y=m * x_data + b,
+                    mode='lines',
+                    name='Trend'
+                ))
+
             st.plotly_chart(fig_corr, use_container_width=True)
 
         st.divider()
