@@ -45,7 +45,6 @@ def load_data():
         df['unique_cvr'] = df.apply(lambda x: (x['ads_unique_cta'] / x['ads_click']) * 100 if x['ads_click'] > 0 else 0, axis=1)
         
         # 4. Define Efficiency Status for Visualization
-        # We define "Good" as CPA below the 25th percentile, and "Problem" as CPA above 75th percentile
         cpa_25 = df['unique_cpa'].quantile(0.25)
         cpa_75 = df['unique_cpa'].quantile(0.75)
         
@@ -69,7 +68,7 @@ df = load_data()
 if not df.empty:
     st.title("🚀 Sparks Edu: 2019 Ads Performance Case Study")
     st.markdown("""
-    **Objective:** Analyze 2019 Weekly Ads Data to identify efficiency gaps and optimization opportunities.
+    **Objective:** Analyze 2019 Weekly Ads Data to identify efficiency gaps.
     <br>
     **Key Metric:** `Unique CPA` (Cost per *New* Student Lead).
     """, unsafe_allow_html=True)
@@ -93,7 +92,7 @@ if not df.empty:
     # === TAB 1: SNAPSHOT VIEW ===
     with tab1:
         st.header("1. The Big Picture")
-        st.markdown("### How did our spending correlate with actual results throughout the year?")
+        st.markdown("### Spending vs Results Trend")
         
         fig_dual = go.Figure()
         fig_dual.add_trace(go.Bar(
@@ -113,14 +112,12 @@ if not df.empty:
             height=500
         )
         st.plotly_chart(fig_dual, use_container_width=True)
-        
-        st.caption("Observation: Note the spikes in gray bars (Spend) around mid-year. Did the blue line (Leads) follow them proportionally? We will explore this in the next tab.")
 
     # === TAB 2: SUCCESS VS PROBLEM WEEKS ===
     with tab2:
         st.header("2. Identifying Performance Extremes")
         st.markdown("""
-        We separated the weeks into **Good** (Efficient) and **Problem** (Expensive) categories based on Cost Per Unique Lead (CPA).
+        We analyze **Efficiency**: How much did we pay for each new student?
         """)
         
         # 1. Visual Overview
@@ -131,7 +128,7 @@ if not df.empty:
             color='status',
             size='ads_spend',
             color_discrete_map={'Good (Efficient)': '#22c55e', 'Problem (Expensive)': '#ef4444', 'Normal': '#94a3b8'},
-            title="Timeline of Efficiency: When did we overpay?",
+            title="Timeline: Cost Per Unique Lead (CPA)",
             labels={'unique_cpa': 'Cost Per Unique Lead', 'week_start_date': 'Week'}
         )
         st.plotly_chart(fig_status, use_container_width=True)
@@ -147,8 +144,7 @@ if not df.empty:
         def format_currency(x): return f"Rp {x:,.0f}"
 
         with col_good:
-            st.success("✅ The 'Success' Weeks (Lowest Cost)")
-            st.markdown("These weeks generated leads for the lowest price. Note that **Spend** is often moderate.")
+            st.success("✅ 'Success' Weeks (Efficient)")
             st.dataframe(
                 top_5_good[['week_start_date', 'ads_spend', 'ads_unique_cta', 'unique_cpa']].style.format({
                     'ads_spend': format_currency, 'unique_cpa': format_currency, 'ads_unique_cta': '{:,.0f}'
@@ -157,8 +153,7 @@ if not df.empty:
             )
 
         with col_bad:
-            st.error("⚠️ The 'Problem' Weeks (Highest Cost)")
-            st.markdown("These weeks were 'Budget Burners'. We spent heavily but got expensive results.")
+            st.error("⚠️ 'Problem' Weeks (Expensive)")
             st.dataframe(
                 top_5_bad[['week_start_date', 'ads_spend', 'ads_unique_cta', 'unique_cpa']].style.format({
                     'ads_spend': format_currency, 'unique_cpa': format_currency, 'ads_unique_cta': '{:,.0f}'
@@ -169,16 +164,14 @@ if not df.empty:
     # === TAB 3: INSIGHTS ===
     with tab3:
         st.header("3. Deep Dive Insights")
-        st.markdown("We looked deeper into the data to understand **why** the problem weeks happened.")
         
         col_insight_1, col_insight_2 = st.columns(2)
         
         # --- INSIGHT A: SCALING TRAP ---
         with col_insight_1:
-            st.subheader("Insight A: The 'Scaling Trap'")
+            st.subheader("A. The 'Scaling Trap'")
             st.markdown("""
-            **The Hypothesis:** "If we double the budget, we get double the leads."
-            \n**The Reality:** **False.** The data shows clear diminishing returns.
+            **Observation:** Efficiency collapses when we spend too much too fast.
             """)
             
             fig_scatter = px.scatter(
@@ -187,23 +180,17 @@ if not df.empty:
                 title="Spend vs. Cost Efficiency",
                 labels={'ads_spend': 'Total Weekly Spend', 'unique_cpa': 'Cost Per Unique Lead'}
             )
-            # Add a vertical line to show the "Danger Zone" threshold (approx 2B)
-            fig_scatter.add_vline(x=2000000000, line_dash="dash", line_color="black", annotation_text="Efficiency Breakpoint")
+            fig_scatter.add_vline(x=2000000000, line_dash="dash", line_color="black", annotation_text="Efficiency Limit")
             st.plotly_chart(fig_scatter, use_container_width=True)
             
-            st.info("""
-            **Analysis:** Look at the chart above. 
-            * As soon as Spend (X-axis) crosses **Rp 2 Billion**, the dots turn **Red**. 
-            * This indicates that our audience pool for that specific targeting saturates at around 2B. 
-            * Spending beyond this point just increases cost, not volume.
-            """)
+            st.info("When Spend > Rp 2B (Right side), we almost always hit the 'Red Zone'. We are paying more to reach the same people repeatedly.")
 
-        # --- INSIGHT B: LEAD QUALITY ---
+        # --- INSIGHT B: QUALITY vs QUANTITY ---
         with col_insight_2:
-            st.subheader("Insight B: The 'Click Bait' Effect")
+            st.subheader("B. The 'Empty Click' Problem")
             st.markdown("""
-            **The Metric:** Unique Conversion Rate (CVR).
-            \n**What it means:** Out of everyone who clicked, how many actually signed up?
+            **Question:** "Clicks are always higher than Buys, so why is this a problem?"
+            \n**Answer:** The *rate* of conversion dropped dangerously low.
             """)
             
             # Create a comparison of CVR for Good vs Bad weeks
@@ -211,16 +198,16 @@ if not df.empty:
             avg_cvr_bad = top_5_bad['unique_cvr'].mean()
             
             fig_bar_cvr = go.Figure(data=[
-                go.Bar(name='Success Weeks', x=['Success Weeks'], y=[avg_cvr_good], marker_color='#22c55e'),
-                go.Bar(name='Problem Weeks', x=['Problem Weeks'], y=[avg_cvr_bad], marker_color='#ef4444')
+                go.Bar(name='Success Weeks', x=['Success Weeks'], y=[avg_cvr_good], marker_color='#22c55e', text=[f"{avg_cvr_good:.1f}%"], textposition='auto'),
+                go.Bar(name='Problem Weeks', x=['Problem Weeks'], y=[avg_cvr_bad], marker_color='#ef4444', text=[f"{avg_cvr_bad:.1f}%"], textposition='auto')
             ])
-            fig_bar_cvr.update_layout(title="Conversion Rate Comparison", yaxis_title="Conversion Rate (%)")
+            fig_bar_cvr.update_layout(title="Conversion Rate (Clicks to Leads)", yaxis_title="Conversion Rate (%)")
             st.plotly_chart(fig_bar_cvr, use_container_width=True)
             
-            st.info(f"""
-            **Analysis:** * During 'Success' weeks, **{avg_cvr_good:.1f}%** of clickers signed up.
-            * During 'Problem' weeks, only **{avg_cvr_bad:.1f}%** signed up.
-            * **Why?** In high-spend weeks, we likely broadened the audience too much, bringing in low-quality traffic that clicks but never converts.
+            st.warning(f"""
+            During Problem Weeks, the conversion rate crashed to **{avg_cvr_bad:.1f}%**. 
+            This means we bought tons of "low quality" clicks (people who click but have no intent to buy). 
+            During Good Weeks, we were much better at targeting "high intent" people (**{avg_cvr_good:.1f}%**).
             """)
 
     # === TAB 4: RECOMMENDATIONS ===
@@ -230,24 +217,19 @@ if not df.empty:
         # Calculate dynamic numbers for the text
         avg_spend_bad = top_5_bad['ads_spend'].mean()
         avg_cpa_bad = top_5_bad['unique_cpa'].mean()
-        avg_cpa_normal = df[df['status'] == 'Normal']['unique_cpa'].mean()
-        savings_potential = (avg_cpa_bad - avg_cpa_normal) / avg_cpa_bad * 100
         
         st.markdown(f"""
-        Based on the 2019 data analysis, we recommend the following 3 actions to improve profitability immediately:
-        
-        ### 1. 🛑 Enforce a "Soft Cap" at Rp 2 Billion
-        * **The Data:** In weeks where we spent over **Rp {avg_spend_bad/1e9:.1f} Billion**, our CPA spiked to **Rp {avg_cpa_bad:,.0f}**.
-        * **The Action:** Do not scale weekly spend beyond Rp 2B on the current audience settings. The data proves efficiency collapses beyond this point.
-        * **Expected Impact:** Avoiding these "burn" weeks could reduce overall CPA by roughly **{savings_potential:.0f}%**.
+        ### 1. 🛑 The "Soft Cap" Rule (Rp 2 Billion)
+        * **The Insight:** Spending above Rp 2B yields diminishing returns.
+        * **The Action:** Cap weekly spend at Rp 2B. If you have extra budget, save it for a different week or a different campaign. Do not force it into the same audience.
 
-        ### 2. 🎯 Revamp "High Spend" Audience Targeting
-        * **The Data:** The conversion rate drops drastically (by ~{(avg_cvr_good - avg_cvr_bad):.1f} points) during high-spend weeks.
-        * **The Action:** This proves we are reaching "junk" traffic when we scale. Instead of Broad targeting, use **Lookalike 1%** audiences of our best students for the first Rp 1B of spend, and only expand to Lookalike 3-5% if CPA remains stable.
+        ### 2. 🎯 Change the "Objective" (Fixing the Click Problem)
+        * **The Insight:** Our high-spend weeks had huge clicks but low conversions. This usually happens when the Ad Algorithm is told to find "Clickers" instead of "Buyers".
+        * **The Action:** Ensure your campaign objective is set to **"Leads"** or **"Conversions"**, NOT "Traffic" or "Link Clicks". We need the algorithm to filter out the "Window Shoppers."
 
-        ### 3. 📉 Shift KPI from "Clicks" to "Unique Leads"
-        * **The Data:** There is a significant discrepancy between total clicks and unique people.
-        * **The Action:** Stop optimizing ads for "Link Clicks". Optimize strictly for "Leads" or "Conversions". The algorithm is currently finding people who like to click but don't like to buy.
+        ### 3. 📉 Focus on "Unique" Metrics
+        * **The Insight:** We found a big gap between `Total Clicks` and `Unique Leads`.
+        * **The Action:** Stop reporting on "Total Clicks". It's a vanity metric. If a user clicks 10 times but buys once, we only care about the 1 buy. Base all future ROI reports on **Cost Per Unique Lead**.
         """)
         
         st.divider()
