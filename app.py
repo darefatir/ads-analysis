@@ -45,9 +45,7 @@ def load_data():
         # METRICS
         df['unique_cpa'] = df.apply(lambda x: x['ads_spend'] / x['ads_unique_cta'] if x['ads_unique_cta'] > 0 else 0, axis=1)
         df['ctr'] = df.apply(lambda x: (x['ads_click'] / x['ads_impression']) * 100 if x['ads_impression'] > 0 else 0, axis=1)
-        # Booking Rate = CTA / Clicks
         df['booking_rate'] = df.apply(lambda x: (x['ads_cta'] / x['ads_click']) * 100 if x['ads_click'] > 0 else 0, axis=1)
-        # CPC (Cost Per Click)
         df['calculated_cpc'] = df.apply(lambda x: x['ads_spend'] / x['ads_click'] if x['ads_click'] > 0 else 0, axis=1)
         
         # STATUS DEFINITION
@@ -126,38 +124,78 @@ if not df.empty:
             st.error("⚠️ 'Problem' Weeks (Expensive)")
             st.dataframe(top_5_bad[['week_start_date', 'ads_spend', 'ads_unique_cta', 'unique_cpa']].style.format({'ads_spend': format_currency, 'unique_cpa': format_currency, 'ads_unique_cta': '{:,.0f}'}), hide_index=True, use_container_width=True)
 
-    # === TAB 3: INSIGHTS (NEW CPC ANALYSIS) ===
+    # === TAB 3: INSIGHTS (IMPROVED CHART & TABLE) ===
     with tab3:
         st.header("3. Deep Dive Insights")
         
         # --- 1. THE PRICE OF QUALITY CHART ---
         st.subheader("A. The 'Price of Quality' Trap")
-        st.markdown("""
-        **Your Question:** "Booking Rate raised! Should we spend more?"
-        **The Answer:** Look at the chart below.
-        * **Green Line (Booking Rate):** Yes, it goes up slightly. (Good)
-        * **Red Line (Cost Per Click):** It explodes upwards! (Bad)
         
-        **Conclusion:** We are paying **3x more** per click just to get a **1.5x better** booking rate. The math doesn't work. We lose money.
-        """)
+        # Create Calculation for Table
+        low_spend_df = df[df['ads_spend'] < 2e9]
+        high_spend_df = df[df['ads_spend'] >= 2e9]
         
-        fig_cpc = go.Figure()
-        fig_cpc.add_trace(go.Scatter(
-            x=df['week_start_date'], y=df['calculated_cpc'], name='Cost Per Click (CPC)',
-            line=dict(color='#ef4444', width=3), mode='lines'
-        ))
-        fig_cpc.add_trace(go.Scatter(
-            x=df['week_start_date'], y=df['booking_rate'], name='Booking Rate (%)',
-            yaxis='y2', line=dict(color='#22c55e', width=3), mode='lines'
-        ))
+        avg_cpc_low = low_spend_df['calculated_cpc'].mean()
+        avg_cpc_high = high_spend_df['calculated_cpc'].mean()
+        cpc_growth = ((avg_cpc_high - avg_cpc_low) / avg_cpc_low) * 100
         
-        fig_cpc.update_layout(
-            title="Trap: Cost Per Click (Red) rises faster than Booking Rate (Green)",
-            yaxis=dict(title=dict(text='Cost Per Click (IDR)', font=dict(color='#ef4444')), tickfont=dict(color='#ef4444'), showgrid=False),
-            yaxis2=dict(title=dict(text='Booking Rate (%)', font=dict(color='#22c55e')), tickfont=dict(color='#22c55e'), overlaying='y', side='right', showgrid=False),
-            hovermode='x unified', template="plotly_white", legend=dict(orientation="h", y=1.1)
-        )
-        st.plotly_chart(fig_cpc, use_container_width=True)
+        avg_br_low = low_spend_df['booking_rate'].mean()
+        avg_br_high = high_spend_df['booking_rate'].mean()
+        br_growth = ((avg_br_high - avg_br_low) / avg_br_low) * 100
+        
+        col_chart, col_table = st.columns([2, 1])
+        
+        with col_chart:
+            fig_cpc = go.Figure()
+            fig_cpc.add_trace(go.Scatter(
+                x=df['week_start_date'], y=df['calculated_cpc'], name='Cost Per Click (CPC)',
+                line=dict(color='#ef4444', width=3), mode='lines'
+            ))
+            fig_cpc.add_trace(go.Scatter(
+                x=df['week_start_date'], y=df['booking_rate'], name='Booking Rate (%)',
+                yaxis='y2', line=dict(color='#22c55e', width=3), mode='lines'
+            ))
+            
+            # IMPROVED LAYOUT: FORCE 0 START
+            fig_cpc.update_layout(
+                title="Trap: Cost (Red) vs Quality (Green)",
+                yaxis=dict(
+                    title=dict(text='Cost Per Click (IDR)', font=dict(color='#ef4444')),
+                    tickfont=dict(color='#ef4444'),
+                    showgrid=False,
+                    rangemode="tozero" # Forces axis to start at 0
+                ),
+                yaxis2=dict(
+                    title=dict(text='Booking Rate (%)', font=dict(color='#22c55e')),
+                    tickfont=dict(color='#22c55e'),
+                    overlaying='y',
+                    side='right',
+                    showgrid=False,
+                    rangemode="tozero" # Forces axis to start at 0
+                ),
+                hovermode='x unified', template="plotly_white", legend=dict(orientation="h", y=1.1)
+            )
+            st.plotly_chart(fig_cpc, use_container_width=True)
+
+        with col_table:
+            st.markdown("##### 📉 ROI Reality Check")
+            st.info("Comparing Low Spend (<2B) vs High Spend (>2B) weeks:")
+            
+            comparison_data = {
+                "Metric": ["Avg Cost Per Click (CPC)", "Avg Booking Rate"],
+                "Low Spend (<2B)": [f"Rp {avg_cpc_low:,.0f}", f"{avg_br_low:.1f}%"],
+                "High Spend (>2B)": [f"Rp {avg_cpc_high:,.0f}", f"{avg_br_high:.1f}%"],
+                "Growth (%)": [f"🔺 +{cpc_growth:.0f}% (Bad)", f"🟢 +{br_growth:.0f}% (Good)"]
+            }
+            comp_df = pd.DataFrame(comparison_data)
+            st.dataframe(comp_df, hide_index=True, use_container_width=True)
+            
+            st.error(f"""
+            **The Problem:**
+            To get a **{br_growth:.0f}%** better booking rate, we had to pay **{cpc_growth:.0f}%** more for every click.
+            
+            This mismatch is why our efficiency drops when we spend too much.
+            """)
         
         st.divider()
         
