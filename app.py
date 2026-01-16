@@ -14,27 +14,39 @@ st.set_page_config(
 # This function caches the data so it doesn't reload every time you click a button
 @st.cache_data
 def load_data():
-    # Attempt to read the CSV file
     try:
-        # Ensure 'ads_data.csv' is in the same GitHub folder as this script
+        # Read the CSV
         df = pd.read_csv('ads_data.csv')
         
-        # Standardize Column Names (stripping spaces just in case)
+        # Clean column names
         df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_')
         
-        # Convert Date
-        # 'dayfirst=True' helps pandas understand 7/1/2019 is Jan 7th, not July 1st
-        df['week_start_date'] = pd.to_datetime(df['week_start_date'], dayfirst=True)
+        # --- THE FIX IS HERE ---
+        # 1. errors='coerce' turns bad data (like "Grand Total") into NaT instead of crashing
+        df['week_start_date'] = pd.to_datetime(df['week_start_date'], dayfirst=True, errors='coerce')
         
-        # Calculate calculated metrics if they aren't in the CSV
-        df['cpa'] = df['ads_spend'] / df['ads_cta']
-        df['ctr'] = (df['ads_click'] / df['ads_impression']) * 100
-        df['cvr'] = (df['ads_cta'] / df['ads_click']) * 100
+        # 2. Drop rows where the date conversion failed (removes empty rows/totals)
+        df = df.dropna(subset=['week_start_date'])
+        # -----------------------
+
+        # Calculate calculated metrics
+        # (We use .get() or checks to ensure columns exist before dividing)
+        if 'ads_spend' in df.columns and 'ads_cta' in df.columns:
+            df['cpa'] = df['ads_spend'] / df['ads_cta']
         
+        if 'ads_click' in df.columns and 'ads_impression' in df.columns:
+            df['ctr'] = (df['ads_click'] / df['ads_impression']) * 100
+            
+        if 'ads_cta' in df.columns and 'ads_click' in df.columns:
+            df['cvr'] = (df['ads_cta'] / df['ads_click']) * 100
+            
         return df
     except FileNotFoundError:
         st.error("❌ Error: 'ads_data.csv' not found. Please upload it to your GitHub repo.")
-        return pd.DataFrame() # Return empty if failed
+        return pd.DataFrame()
+    except Exception as e:
+        st.error(f"❌ An error occurred: {e}")
+        return pd.DataFrame()
 
 df = load_data()
 
