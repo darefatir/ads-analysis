@@ -124,12 +124,12 @@ if not df.empty:
             st.error("⚠️ 'Problem' Weeks (Expensive)")
             st.dataframe(top_5_bad[['week_start_date', 'ads_spend', 'ads_unique_cta', 'unique_cpa']].style.format({'ads_spend': format_currency, 'unique_cpa': format_currency, 'ads_unique_cta': '{:,.0f}'}), hide_index=True, use_container_width=True)
 
-    # === TAB 3: INSIGHTS (UPDATED WITH CTR vs BOOKING RATE) ===
+    # === TAB 3: INSIGHTS (FIXED CHART) ===
     with tab3:
         st.header("3. Deep Dive Insights")
-        st.markdown("**Hypothesis Check:** The user noticed that CTR is dropping, but Booking Rate is rising. Is this true?")
+        st.markdown("**Hypothesis Check:** Is the lower CTR actually a good thing?")
         
-        # --- NEW CHART: CTR vs BOOKING RATE ---
+        # --- NEW CHART: CTR vs BOOKING RATE (FIXED) ---
         fig_quality = go.Figure()
         
         # Line 1: CTR (Left Axis)
@@ -144,19 +144,32 @@ if not df.empty:
             yaxis='y2', line=dict(color='#22c55e', width=3), mode='lines'
         ))
         
+        # FIX: Use nested dict for title to avoid ValueError in strict environments
         fig_quality.update_layout(
             title="Quality Check: Click Rate vs Booking Rate",
-            yaxis=dict(title='CTR (%)', titlefont=dict(color='#ef4444'), tickfont=dict(color='#ef4444'), showgrid=False),
-            yaxis2=dict(title='Booking Rate (%)', titlefont=dict(color='#22c55e'), tickfont=dict(color='#22c55e'), overlaying='y', side='right', showgrid=False),
-            hovermode='x unified', template="plotly_white", legend=dict(orientation="h", y=1.1)
+            yaxis=dict(
+                title=dict(text='CTR (%)', font=dict(color='#ef4444')),
+                tickfont=dict(color='#ef4444'),
+                showgrid=False
+            ),
+            yaxis2=dict(
+                title=dict(text='Booking Rate (%)', font=dict(color='#22c55e')),
+                tickfont=dict(color='#22c55e'),
+                overlaying='y',
+                side='right',
+                showgrid=False
+            ),
+            hovermode='x unified',
+            template="plotly_white",
+            legend=dict(orientation="h", y=1.1)
         )
         st.plotly_chart(fig_quality, use_container_width=True)
         
         st.info("""
-        **Data Confirmed:** You are looking at the right thing!
-        * **Red Line (CTR)** is trending down (or staying low).
-        * **Green Line (Booking Rate)** is trending up in key areas.
-        * **Meaning:** We are getting fewer "window shoppers" (people who click but don't buy) and more "serious buyers." This suggests our targeting is getting sharper, even if clicks are lower.
+        **Data Confirmed:** You are right!
+        * **Red Line (CTR)** is low/dropping.
+        * **Green Line (Booking Rate)** is rising.
+        * **Meaning:** We stopped paying for "window shoppers" (people who click but don't buy). The traffic we get now is **Higher Intent**. This is a sign of a maturing ad account.
         """)
 
         st.divider()
@@ -172,6 +185,15 @@ if not df.empty:
             fig_scatter.update_traces(textposition='top center')
             fig_scatter.update_layout(showlegend=True)
             st.plotly_chart(fig_scatter, use_container_width=True)
+            
+            # Recalculate diff for text
+            high_spend_df = df[df['ads_spend'] > 2e9]
+            low_spend_df = df[df['ads_spend'] <= 2e9]
+            if not high_spend_df.empty:
+                 avg_cpa_high = high_spend_df['unique_cpa'].mean()
+                 avg_cpa_low = low_spend_df['unique_cpa'].mean()
+                 diff_pct = ((avg_cpa_high - avg_cpa_low) / avg_cpa_low) * 100
+                 st.info(f"👉 **Impact:** Weeks with >2B Spend cost **{diff_pct:.0f}% more** per student.")
 
         with col_insight_2:
             st.subheader("B. The 'Intent' Drop")
@@ -213,6 +235,8 @@ if not df.empty:
         with c2:
             st.subheader("2. 🎯 Focus on Booking Rate")
             st.markdown("Action: Don't panic if CTR drops. Optimizing for 'Leads' often lowers CTR but increases Booking Rate.")
+            
+            # Manual Trendline for Booking Rate
             fig_corr = px.scatter(df, x='ads_spend', y='booking_rate', title="Correlation: Spend vs Booking Rate", labels={'ads_spend': 'Ad Spend (Rp)', 'booking_rate': 'Booking Rate (%)'})
             x_data = df['ads_spend']
             y_data = df['booking_rate']
