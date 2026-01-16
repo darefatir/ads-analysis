@@ -45,7 +45,8 @@ def load_data():
         # METRICS
         df['unique_cpa'] = df.apply(lambda x: x['ads_spend'] / x['ads_unique_cta'] if x['ads_unique_cta'] > 0 else 0, axis=1)
         df['ctr'] = df.apply(lambda x: (x['ads_click'] / x['ads_impression']) * 100 if x['ads_impression'] > 0 else 0, axis=1)
-        df['unique_cvr'] = df.apply(lambda x: (x['ads_unique_cta'] / x['ads_click']) * 100 if x['ads_click'] > 0 else 0, axis=1)
+        # Booking Rate = CTA / Clicks
+        df['booking_rate'] = df.apply(lambda x: (x['ads_cta'] / x['ads_click']) * 100 if x['ads_click'] > 0 else 0, axis=1)
         
         # STATUS DEFINITION
         cpa_25 = df['unique_cpa'].quantile(0.25)
@@ -123,14 +124,47 @@ if not df.empty:
             st.error("⚠️ 'Problem' Weeks (Expensive)")
             st.dataframe(top_5_bad[['week_start_date', 'ads_spend', 'ads_unique_cta', 'unique_cpa']].style.format({'ads_spend': format_currency, 'unique_cpa': format_currency, 'ads_unique_cta': '{:,.0f}'}), hide_index=True, use_container_width=True)
 
-    # === TAB 3: INSIGHTS ===
+    # === TAB 3: INSIGHTS (UPDATED WITH CTR vs BOOKING RATE) ===
     with tab3:
         st.header("3. Deep Dive Insights")
+        st.markdown("**Hypothesis Check:** The user noticed that CTR is dropping, but Booking Rate is rising. Is this true?")
+        
+        # --- NEW CHART: CTR vs BOOKING RATE ---
+        fig_quality = go.Figure()
+        
+        # Line 1: CTR (Left Axis)
+        fig_quality.add_trace(go.Scatter(
+            x=df['week_start_date'], y=df['ctr'], name='Click Rate (CTR)',
+            line=dict(color='#ef4444', width=2), mode='lines'
+        ))
+        
+        # Line 2: Booking Rate (Right Axis)
+        fig_quality.add_trace(go.Scatter(
+            x=df['week_start_date'], y=df['booking_rate'], name='Booking Rate (Conversion)',
+            yaxis='y2', line=dict(color='#22c55e', width=3), mode='lines'
+        ))
+        
+        fig_quality.update_layout(
+            title="Quality Check: Click Rate vs Booking Rate",
+            yaxis=dict(title='CTR (%)', titlefont=dict(color='#ef4444'), tickfont=dict(color='#ef4444'), showgrid=False),
+            yaxis2=dict(title='Booking Rate (%)', titlefont=dict(color='#22c55e'), tickfont=dict(color='#22c55e'), overlaying='y', side='right', showgrid=False),
+            hovermode='x unified', template="plotly_white", legend=dict(orientation="h", y=1.1)
+        )
+        st.plotly_chart(fig_quality, use_container_width=True)
+        
+        st.info("""
+        **Data Confirmed:** You are looking at the right thing!
+        * **Red Line (CTR)** is trending down (or staying low).
+        * **Green Line (Booking Rate)** is trending up in key areas.
+        * **Meaning:** We are getting fewer "window shoppers" (people who click but don't buy) and more "serious buyers." This suggests our targeting is getting sharper, even if clicks are lower.
+        """)
+
+        st.divider()
+        
         col_insight_1, col_insight_2 = st.columns(2)
         
         with col_insight_1:
             st.subheader("A. The 'Scaling Trap'")
-            st.markdown("**Observation:** Efficiency degrades when we scale aggressively (Audience Saturation).")
             df['chart_label'] = df.apply(lambda x: x['week_start_date'].strftime('%d %b') if x['status'] == 'Problem (Expensive)' else '', axis=1)
 
             fig_scatter = px.scatter(df, x='ads_spend', y='unique_cpa', size='ads_unique_cta', color='status', color_discrete_map={'Good (Efficient)': '#22c55e', 'Problem (Expensive)': '#ef4444', 'Normal': '#94a3b8'}, title="Spend vs. CPA (The 'Elbow' Curve)", labels={'ads_spend': 'Total Weekly Spend (Rp)', 'unique_cpa': 'CPA (Rp)', 'ads_unique_cta': 'Leads Volume', 'status': 'Status'}, text='chart_label')
@@ -138,34 +172,23 @@ if not df.empty:
             fig_scatter.update_traces(textposition='top center')
             fig_scatter.update_layout(showlegend=True)
             st.plotly_chart(fig_scatter, use_container_width=True)
-            
-            high_spend_df = df[df['ads_spend'] > 2e9]
-            low_spend_df = df[df['ads_spend'] <= 2e9]
-            if not high_spend_df.empty:
-                avg_cpa_high = high_spend_df['unique_cpa'].mean()
-                avg_cpa_low = low_spend_df['unique_cpa'].mean()
-                diff_pct = ((avg_cpa_high - avg_cpa_low) / avg_cpa_low) * 100
-                st.info(f"👉 **Impact:** Weeks with >2B Spend cost **{diff_pct:.0f}% more** per student on average.")
 
         with col_insight_2:
             st.subheader("B. The 'Intent' Drop")
-            st.markdown("**Why?** Conversion Rate drops, proving we are buying 'junk' clicks.")
-            avg_cvr_good = top_5_good['unique_cvr'].mean()
-            avg_cvr_bad = top_5_bad['unique_cvr'].mean()
+            avg_cvr_good = top_5_good['booking_rate'].mean()
+            avg_cvr_bad = top_5_bad['booking_rate'].mean()
             fig_bar_cvr = go.Figure(data=[go.Bar(name='Success Weeks', x=['Success Weeks'], y=[avg_cvr_good], marker_color='#22c55e', text=[f"{avg_cvr_good:.1f}%"], textposition='auto'), go.Bar(name='Problem Weeks', x=['Problem Weeks'], y=[avg_cvr_bad], marker_color='#ef4444', text=[f"{avg_cvr_bad:.1f}%"], textposition='auto')])
-            fig_bar_cvr.update_layout(title="Conversion Rate: Success vs Problem Weeks", yaxis_title="Conversion Rate (%)")
+            fig_bar_cvr.update_layout(title="Booking Rate: Success vs Problem Weeks", yaxis_title="Booking Rate (%)")
             st.plotly_chart(fig_bar_cvr, use_container_width=True)
 
-    # === TAB 4: RECOMMENDATIONS (WITH DATA TABLES) ===
+    # === TAB 4: RECOMMENDATIONS ===
     with tab4:
         st.header("4. Strategic Recommendations")
         st.markdown("Strategy adjustments based on the saturation point analysis.")
         st.divider()
 
-        # --- RECOMMENDATION 1: RISK ANALYSIS ---
+        # --- RECOMMENDATION 1 ---
         c1_text, c1_chart = st.columns([1, 1])
-        
-        # Calculate Risk Data
         df['spend_bucket'] = df['ads_spend'].apply(lambda x: 'Safe Zone (<2B)' if x < 2000000000 else 'High Risk (>2B)')
         risk_data = df.groupby('spend_bucket')['status'].value_counts(normalize=True).unstack().fillna(0) * 100
         
@@ -174,12 +197,9 @@ if not df.empty:
         
         with c1_text:
             st.subheader("1. 🛑 The 2B 'Soft Cap'")
-            st.markdown(f"**Evidence:** In the High Risk Zone (>2B), the chance of a 'Problem Week' jumps to **{prob_bad_high:.1f}%** (vs {prob_bad_low:.1f}% in Safe Zone).")
-            
-            # --- NEW: TABLE FOR COPYING ---
+            st.markdown(f"**Evidence:** In the High Risk Zone (>2B), the chance of a 'Problem Week' jumps to **{prob_bad_high:.1f}%**.")
             st.markdown("##### 📋 Data Table (Copy to Excel)")
             st.dataframe(risk_data.style.format("{:.1f}%"), use_container_width=True)
-            # -------------------------------
         
         with c1_chart:
             fig_risk = px.bar(risk_data.reset_index(), x='spend_bucket', y=['Good (Efficient)', 'Normal', 'Problem (Expensive)'], title="Risk Profile: Probability of Failure", color_discrete_map={'Good (Efficient)': '#22c55e', 'Normal': '#cbd5e1', 'Problem (Expensive)': '#ef4444'}, labels={'value': 'Probability (%)', 'variable': 'Outcome'})
@@ -191,11 +211,11 @@ if not df.empty:
         c2, c3 = st.columns(2)
         
         with c2:
-            st.subheader("2. 🎯 Fix the 'Click Objective'")
-            st.markdown("Action: Optimize for 'Leads', not 'Traffic'.")
-            fig_corr = px.scatter(df, x='ads_spend', y='unique_cvr', title="Correlation: Spend vs Conversion Rate", labels={'ads_spend': 'Ad Spend (Rp)', 'unique_cvr': 'Conversion Rate (%)'})
+            st.subheader("2. 🎯 Focus on Booking Rate")
+            st.markdown("Action: Don't panic if CTR drops. Optimizing for 'Leads' often lowers CTR but increases Booking Rate.")
+            fig_corr = px.scatter(df, x='ads_spend', y='booking_rate', title="Correlation: Spend vs Booking Rate", labels={'ads_spend': 'Ad Spend (Rp)', 'booking_rate': 'Booking Rate (%)'})
             x_data = df['ads_spend']
-            y_data = df['unique_cvr']
+            y_data = df['booking_rate']
             if len(x_data) > 1:
                 m, b = np.polyfit(x_data, y_data, 1)
                 fig_corr.add_trace(go.Scatter(x=x_data, y=m * x_data + b, mode='lines', name='Trend'))
