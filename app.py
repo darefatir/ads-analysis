@@ -20,30 +20,34 @@ def load_data():
         # Clean column names
         df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_')
         
-        # --- FIX 1: CLEAN NUMERIC COLUMNS (Remove commas) ---
-        # List of columns that might contain commas
-        numeric_cols = ['ads_spend', 'ads_impression', 'ads_click', 'ads_cta', 'ads_unique_cta', 'cpm', 'cpc', 'cpa']
+        # --- FIX 1: HANDLE DATES (MISSING YEAR) ---
+        # The CSV has dates like "07 Jan" (no year). We must add the year manually.
+        # I am assuming 2024. Change this to " 2025" if this data is from 2025.
+        YEAR_SUFFIX = " 2019" 
+        
+        # Convert to string, add year, then convert to datetime
+        df['week_start_date'] = df['week_start_date'].astype(str) + YEAR_SUFFIX
+        df['week_start_date'] = pd.to_datetime(df['week_start_date'], format='%d %b %Y', errors='coerce')
+        
+        # Drop rows where date failed (removes "Grand Total" or empty rows)
+        df = df.dropna(subset=['week_start_date'])
+        
+        # Sort by date
+        df = df.sort_values('week_start_date')
+
+        # --- FIX 2: CLEAN NUMBERS (REMOVE COMMAS) ---
+        # Columns that need to be numbers but might have commas
+        numeric_cols = ['ads_spend', 'ads_impression', 'ads_click', 'ads_cta', 'cpa', 'cpc', 'cpm']
         
         for col in numeric_cols:
             if col in df.columns:
-                # Force convert to string, remove commas, then convert to numeric
+                # Remove commas and convert to number
                 df[col] = df[col].astype(str).str.replace(',', '', regex=False)
                 df[col] = pd.to_numeric(df[col], errors='coerce')
-        # ----------------------------------------------------
-
-        # --- FIX 2: DATE HANDLING ---
-        # errors='coerce' turns bad data into NaT instead of crashing
-        df['week_start_date'] = pd.to_datetime(df['week_start_date'], dayfirst=True, errors='coerce')
-        
-        # Drop rows where the date conversion failed (removes empty rows/totals)
-        df = df.dropna(subset=['week_start_date'])
-        
-        # Sort by date to make charts look correct
-        df = df.sort_values('week_start_date')
 
         # --- CALCULATE METRICS ---
         if 'ads_spend' in df.columns and 'ads_cta' in df.columns:
-            # Avoid division by zero
+            # Use safe division (fill 0 if division by zero)
             df['cpa'] = df.apply(lambda x: x['ads_spend'] / x['ads_cta'] if x['ads_cta'] > 0 else 0, axis=1)
         
         if 'ads_click' in df.columns and 'ads_impression' in df.columns:
@@ -121,7 +125,7 @@ if not df.empty:
     # Question 2: Success & Problem Detector
     st.subheader("2. Automated Performance Detection")
     
-    # Find Best/Worst weeks (filtering out 0 CPA to avoid empty data skews)
+    # Filter valid weeks (CPA > 0)
     valid_weeks = df[df['cpa'] > 0]
     
     if not valid_weeks.empty:
@@ -140,7 +144,7 @@ if not df.empty:
             st.metric("CPA", f"Rp {worst_week['cpa']:,.0f}")
             st.metric("Bookings", f"{worst_week['ads_cta']:,.0f}")
     else:
-        st.info("Not enough data to determine best/worst weeks.")
+        st.info("Not enough data to calculate efficiency.")
 
     # Question 3: Insights (Scatter Plot)
     st.subheader("3. Scale Analysis (Spend vs Result)")
