@@ -39,22 +39,17 @@ with st.sidebar:
 def load_data():
     try:
         # NOTE: Ensure 'ads_data.csv' is in the same directory
-        # Handling the metadata rows at the bottom by reading only valid rows if necessary
-        # For simplicity, we assume standard CSV structure or robust error handling
         df = pd.read_csv('ads_data.csv')
         
         # CLEAN COLUMN NAMES
         df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_')
         
         # FIX: HANDLE DATES & NUMBERS
-        # Assuming the date format is Day Month (e.g., "07 Jan")
-        # We append a year to make it datetime compatible. 
-        # Adjust YEAR if necessary.
         YEAR_SUFFIX = " 2019" 
         df['week_start_date'] = df['week_start_date'].astype(str) + YEAR_SUFFIX
         df['week_start_date'] = pd.to_datetime(df['week_start_date'], format='%d %b %Y', errors='coerce')
         
-        # Drop rows that failed date conversion (likely metadata rows)
+        # Drop rows that failed date conversion
         df = df.dropna(subset=['week_start_date']).sort_values('week_start_date')
 
         numeric_cols = ['ads_spend', 'ads_impression', 'ads_click', 'ads_cta', 'ads_unique_cta', 'cpa', 'cpc', 'cpm']
@@ -65,19 +60,19 @@ def load_data():
                 df[col] = pd.to_numeric(df[col], errors='coerce')
 
         # --- CALCULATED METRICS ---
-        # 1. Unique CPA (Cost Per Unique Booking)
+        # 1. Unique CPA
         df['unique_cpa'] = df.apply(lambda x: x['ads_spend'] / x['ads_unique_cta'] if x['ads_unique_cta'] > 0 else 0, axis=1)
         
-        # 2. CTR (Click Through Rate)
+        # 2. CTR
         df['ctr'] = df.apply(lambda x: (x['ads_click'] / x['ads_impression']) * 100 if x['ads_impression'] > 0 else 0, axis=1)
         
-        # 3. Booking Rate (Conversion Rate: Clicks -> CTA)
+        # 3. Booking Rate
         df['booking_rate'] = df.apply(lambda x: (x['ads_cta'] / x['ads_click']) * 100 if x['ads_click'] > 0 else 0, axis=1)
         
-        # 4. Calculated CPC (Spend / Clicks) - to ensure accuracy
+        # 4. Calculated CPC
         df['calculated_cpc'] = df.apply(lambda x: x['ads_spend'] / x['ads_click'] if x['ads_click'] > 0 else 0, axis=1)
         
-        # 5. Status Definition (Quartiles)
+        # 5. Status Definition
         cpa_25 = df['unique_cpa'].quantile(0.25)
         cpa_75 = df['unique_cpa'].quantile(0.75)
         
@@ -159,7 +154,6 @@ if not df.empty:
             title="Cost Efficiency Timeline (Bubble Size = Spend Amount)",
             labels={'unique_cpa': 'CPA (Rp)', 'week_start_date': 'Week'}
         )
-        # Add a reference line for average CPA
         fig_status.add_hline(y=df['unique_cpa'].mean(), line_dash="dot", annotation_text="Avg CPA", annotation_position="bottom right")
         
         st.plotly_chart(fig_status, use_container_width=True)
@@ -220,10 +214,10 @@ if not df.empty:
         
         with col_viz1:
             st.markdown("#### 1. The 'Elbow' Curve")
-            # Scatter Plot: Spend vs CPA
+            # FIX: Removed 'trendline="lowess"' to prevent ModuleNotFoundError
             fig_elbow = px.scatter(
                 df, x="ads_spend", y="unique_cpa", 
-                trendline="lowess", 
+                # trendline="lowess", # Removed to ensure compatibility
                 title="Diminishing Returns: As Spend (X) Increases, CPA (Y) Rises",
                 labels={"ads_spend": "Weekly Ad Spend (IDR)", "unique_cpa": "Cost Per Acquisition (IDR)"},
                 color="status",
